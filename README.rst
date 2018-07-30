@@ -20,6 +20,7 @@ INSTALLATION
 The first thing to do is install the local certificate:
 
 -Run the script setup_https_intercepts.sh
+
 -Add the certificate to your browser
 
 USAGE
