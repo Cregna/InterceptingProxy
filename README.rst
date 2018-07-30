@@ -13,6 +13,7 @@ InterceptingProxy.  Script of an interceptin proxy
 
 PURPOSE
 -------
+Creation of an Intercepting Proxy Script in Python 3.
 
 INSTALLATION
 ------------
