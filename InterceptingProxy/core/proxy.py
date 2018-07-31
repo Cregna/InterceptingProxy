@@ -15,7 +15,7 @@ import json
 import re
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from socketserver import ThreadingMixIn
-from io import StringIO, BytesIO
+from io import BytesIO
 from subprocess import Popen, PIPE
 from html.parser import HTMLParser
 

@@ -1,0 +1,9 @@
+[
+  "tests/test_sanity.py::test_true",
+  "tests/test_sanity.py::test_false",
+  "tests/test_sanity.py::test_trueexpr",
+  "tests/test_sanity.py::test_falseexpr",
+  "tests/test_sanity.py::test_math",
+  "tests/test_sanity.py::test_bitwise",
+  "tests/test_sanity.py::test_import"
+]
