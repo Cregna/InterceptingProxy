@@ -1,11 +1,10 @@
-==============================================================================
+
 InterceptingProxy.  Script of an interceptin proxy
-==============================================================================
-:Info: This is the README file for InterceptingProxy.
-:Author: Regna Cristian <none>
-:Copyright: © 2017, Regna Cristian.
-:Date: 2017-01-01
-:Version: 0.1.0
+--------------------------------------------------
+
+Info: This is the README file for InterceptingProxy.
+Author: Regna Cristian 
+Version: 0.1.0
 
 .. index: README
 .. image:: https://travis-ci.org/XxxsiriusxxX/InterceptingProxy.svg?branch=master
@@ -31,7 +30,7 @@ NOTES
 
 COPYRIGHT
 ---------
-Copyright © 2017, Regna Cristian.
+Copyright © 2018, Regna Cristian.
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
