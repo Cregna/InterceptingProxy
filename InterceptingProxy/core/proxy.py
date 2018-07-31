@@ -15,7 +15,7 @@ import json
 import re
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from socketserver import ThreadingMixIn
-from io import BytesIO
+from io import StringIO, BytesIO
 from subprocess import Popen, PIPE
 from html.parser import HTMLParser
 
@@ -23,8 +23,36 @@ from html.parser import HTMLParser
 def with_color(c, s):
     return "\x1b[%dm%s\x1b[0m" % (c, s)
 
+
 def join_with_script_dir(path):
     return os.path.join(os.path.dirname(os.path.abspath(__file__)), path)
+
+
+class Request:
+    def __init__(self, command, path, request_version, header, query, cookie, body):
+        self.command = command
+        self.path = path
+        self.request_version = request_version
+        self.header = header
+        self.query = query
+        self.cookie = cookie
+        self.body = body
+    def print_req(self):
+        print(self.command + " " + self.path + " " + self.request_version + "\n\nHEADER" + self.header + "\n\nQUERY-PARAMETER" + self.query + "\n\nCOOKIE" + self.cookie + "\n\nBODY REQUEST"+ self.body)
+
+class Response:
+    def __init__(self, version, status, reason, header, set_cookie, body):
+        self.version = version
+        self.status = status
+        self.reason = reason
+        self.header = header
+        self.set_cookie = set_cookie
+        self. body = body
+    def print_res(self):
+        print(self.version + " " + self.status + " " + self.reason + "\n\nHEADER" + self.header + "\n\nSET-COOKIE" + self.set_cookie + "\n\nRESPONSE BODY" + self.body)
+
+
+
 
 
 class ThreadingHTTPServer(ThreadingMixIn, HTTPServer):
@@ -47,11 +75,19 @@ class ProxyRequestHandler(BaseHTTPRequestHandler):
     certdir = join_with_script_dir('certs/')
     timeout = 5
     lock = threading.Lock()
+    reqlist = []
+    reslist = []
 
     def __init__(self, *args, **kwargs):
         self.tls = threading.local()
         self.tls.conns = {}
         BaseHTTPRequestHandler.__init__(self, *args, **kwargs)
+
+    def get_req(self):
+        return self.reqlist
+
+    def get_res(self):
+        return self.reslist
 
     def log_error(self, format, *args):
         # surpress "Request timed out: timeout('timed out',)"
@@ -116,7 +152,7 @@ class ProxyRequestHandler(BaseHTTPRequestHandler):
                     break
                 other.sendall(data)
 
-    def do_GET(self):
+    def make_req(self):
         req = self
         content_length = int(req.headers.get('Content-Length', 0))
         req_body = self.rfile.read(content_length) if content_length else None
@@ -141,7 +177,6 @@ class ProxyRequestHandler(BaseHTTPRequestHandler):
         if netloc:
             req.headers['Host'] = netloc
         setattr(req, 'headers', self.filter_headers(req.headers))
-
         try:
             origin = (scheme, netloc)
             if not origin in self.tls.conns:
@@ -151,27 +186,30 @@ class ProxyRequestHandler(BaseHTTPRequestHandler):
                     self.tls.conns[origin] = http.client.HTTPConnection(netloc, timeout=self.timeout)
             conn = self.tls.conns[origin]
             conn.request(self.command, path, req_body, dict(req.headers))
-            res = conn.getresponse()
-
-            version_table = {10: 'HTTP/1.0', 11: 'HTTP/1.1'}
-            setattr(res, 'headers', res.msg)
-            setattr(res, 'response_version', version_table[res.version])
-
-            # support streaming
-            if not 'Content-Length' in res.headers and 'no-store' in res.headers.get('Cache-Control', ''):
-                self.response_handler(req, req_body, res, '')
-                setattr(res, 'headers', self.filter_headers(res.headers))
-                self.relay_streaming(res)
-                with self.lock:
-                    self.save_handler(req, req_body, res, '')
-                return
-
-            res_body = res.read()
         except Exception as e:
             if origin in self.tls.conns:
                 del self.tls.conns[origin]
             self.send_error(502)
             return
+        return req, req_body, conn
+
+    def make_res(self, req, req_body, conn):
+        res = conn.getresponse()
+
+        version_table = {10: 'HTTP/1.0', 11: 'HTTP/1.1'}
+        setattr(res, 'headers', res.msg)
+        setattr(res, 'response_version', version_table[res.version])
+
+        # support streaming
+        if not 'Content-Length' in res.headers and 'no-store' in res.headers.get('Cache-Control', ''):
+            self.response_handler(req, req_body, res, '')
+            setattr(res, 'headers', self.filter_headers(res.headers))
+            self.relay_streaming(res)
+            with self.lock:
+                self.save_handler(self.req, req_body, res, '')
+            return
+
+        res_body = res.read()
         content_encoding = res.headers.get('Content-Encoding', 'identity')
         res_body_plain = self.decode_content_body(res_body, content_encoding)
 
@@ -195,9 +233,19 @@ class ProxyRequestHandler(BaseHTTPRequestHandler):
         else:
             pass
         self.wfile.flush()
+        return res, res_body
+
+    def do_GET(self):
 
         with self.lock:
-            self.save_handler(req, req_body, res, res_body_plain)
+            req, req_body, conn = self.make_req()
+            self.print_request(req, req_body)
+            res, res_body = self.make_res(req, req_body, conn)
+        with self.lock:
+            self.print_response(res, res_body)
+        with self.lock:
+            self.save_handler(req, req_body, res, res_body)
+
 
     def relay_streaming(self, res):
         self.send_response(res.status, res.reason)
@@ -280,6 +328,74 @@ class ProxyRequestHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
+    def save_info(self, req, req_body, res, res_body):
+        def parse_qsl(s):
+            return '\n'.join("%-20s %s" % (k, v) for k, v in urllib.parse.parse_qsl(s, keep_blank_values=True))
+        query_text = ""
+        u = urllib.parse.urlsplit(req.path)
+        if u.query:
+            query_text = parse_qsl(u.query)
+
+        cookie = req.headers.get('Cookie', '')
+        if cookie:
+            cookie = parse_qsl((re.sub(r';\s*', '&', cookie)))
+
+        auth = req.headers.get('Authorization', '')
+        if auth.lower().startswith('basic'):
+            token = auth.split()[1].decode('base64')
+
+        if req_body is not None:
+            req_body_text = None
+            content_type = req.headers.get('Content-Type', '')
+
+            if content_type.startswith('application/x-www-form-urlencoded'):
+                req_body_text = parse_qsl(req_body.decode('utf-8'))
+            elif content_type.startswith('application/json'):
+                try:
+                    json_obj = json.loads(req_body.decode())
+                    json_str = json.dumps(json_obj, indent=2)
+                    if json_str.count('\n') < 50:
+                        req_body_text = json_str
+                    else:
+                        lines = json_str.splitlines()
+                        req_body_text = "%s\n(%d lines)" % ('\n'.join(lines[:50]), len(lines))
+                except ValueError:
+                    req_body_text = req_body
+            elif req_body:
+                req_body_text = req_body.decode()
+        else:
+            req_body_text = ""
+
+        self.reqlist.append(
+            Request(req.command, req.path, req.request_version, req.headers, query_text, cookie, req_body_text))
+
+        cookies = res.headers.get('Set-Cookie')
+        if cookies:
+            print(with_color(31, "==== SET-COOKIE ====\n%s\n" % cookies))
+        res_body_text = ""
+        if res_body is not None:
+            res_body_text = None
+            content_type = res.headers.get('Content-Type', '')
+
+            if content_type.startswith('application/json'):
+                try:
+                    json_obj = json.loads(res_body.decode())
+                    json_str = json.dumps(json_obj, indent=2)
+                    if json_str.count('\n') < 50:
+                        res_body_text = json_str
+                    else:
+                        lines = json_str.splitlines()
+                        res_body_text = "%s\n(%d lines)" % ('\n'.join(lines[:50]), len(lines))
+                except ValueError:
+                    res_body_text = res_body
+            elif content_type.startswith('text/html'):
+                m = re.search(r'<title[^>]*>\s*([^<]+?)\s*</title>', res_body.decode(), re.I)
+                if m:
+                    h = HTMLParser()
+            elif content_type.startswith('text/'):
+                res_body_text = res_body.decode()
+        self.reslist.append(Response(res.response_version, res.status, res.reason, res.headers, cookies, res_body_text))
+
     def print_info(self, req, req_body, res, res_body):
         def parse_qsl(s):
             return '\n'.join("%-20s %s" % (k, v) for k, v in urllib.parse.parse_qsl(s, keep_blank_values=True))
@@ -323,7 +439,6 @@ class ProxyRequestHandler(BaseHTTPRequestHandler):
                     req_body_text = req_body
             elif len(req_body) < 1024:
                 req_body_text = req_body.decode()
-
             if req_body_text:
                 print(with_color(32, "==== REQUEST BODY ====\n%s\n" % req_body_text))
 
@@ -355,19 +470,102 @@ class ProxyRequestHandler(BaseHTTPRequestHandler):
                     h = HTMLParser()
                     print(with_color(32, "==== HTML TITLE ====\n%s\n" % h.unescape(m.group(1))))
             elif content_type.startswith('text/') and len(res_body) < 1024:
-                res_body_text = res_body.decode
+                res_body_text = res_body.decode()
 
             if res_body_text: #Se tolgo questa condizione stampa tutto il codice html
                 print(with_color(32, "==== RESPONSE BODY ====\n%s\n" % res_body_text))
 
+    def print_request(self, req, req_body):
+        def parse_qsl(s):
+            return '\n'.join("%-20s %s" % (k, v) for k, v in urllib.parse.parse_qsl(s, keep_blank_values=True))
+
+        req_header_text = "%s %s %s\n%s" % (req.command, req.path, req.request_version, req.headers)
+
+        print(with_color(33, req_header_text))
+
+        u = urllib.parse.urlsplit(req.path)
+        if u.query:
+            query_text = parse_qsl(u.query)
+            print(with_color(32, "==== QUERY PARAMETERS ====\n%s\n" % query_text))
+
+        cookie = req.headers.get('Cookie', '')
+        if cookie:
+            cookie = parse_qsl((re.sub(r';\s*', '&', cookie)))
+            print(with_color(32, "==== COOKIE ====\n%s\n" % cookie))
+
+        auth = req.headers.get('Authorization', '')
+        if auth.lower().startswith('basic'):
+            token = auth.split()[1].decode('base64')
+            print(with_color(31, "==== BASIC AUTH ====\n%s\n" % token))
+
+        if req_body is not None:
+            req_body_text = None
+            content_type = req.headers.get('Content-Type', '')
+
+            if content_type.startswith('application/x-www-form-urlencoded'):
+                req_body_text = parse_qsl(req_body.decode('utf-8'))
+            elif content_type.startswith('application/json'):
+                try:
+                    json_obj = json.loads(req_body.decode())
+                    json_str = json.dumps(json_obj, indent=2)
+                    if json_str.count('\n') < 50:
+                        req_body_text = json_str
+                    else:
+                        lines = json_str.splitlines()
+                        req_body_text = "%s\n(%d lines)" % ('\n'.join(lines[:50]), len(lines))
+                except ValueError:
+                    req_body_text = req_body.decode()
+            elif len(req_body) < 1024:
+                req_body_text = req_body.decode()
+            if req_body_text:
+                print(with_color(32, "==== REQUEST BODY ====\n%s\n" % req_body_text))
+
+
+    def print_response(self, res, res_body):
+        res_header_text = "%s %d %s\n%s" % (res.response_version, res.status, res.reason, res.headers)
+        print(with_color(36, res_header_text))
+        cookies = res.headers.get('Set-Cookie')
+        if cookies:
+            # cookies = '\n'.join(cookies)
+            print(with_color(31, "==== SET-COOKIE ====\n%s\n" % cookies))
+
+        if res_body is not None:
+            res_body_text = None
+            content_type = res.headers.get('Content-Type', '')
+
+            if content_type.startswith('application/json'):
+                try:
+                    json_obj = json.loads(res_body.decode())
+                    json_str = json.dumps(json_obj, indent=2)
+                    if json_str.count('\n') < 50:
+                        res_body_text = json_str
+                    else:
+                        lines = json_str.splitlines()
+                        res_body_text = "%s\n(%d lines)" % ('\n'.join(lines[:50]), len(lines))
+                except ValueError:
+                    res_body_text = res_body.decode()
+            elif content_type.startswith('text/html'):
+                m = re.search(r'<title[^>]*>\s*([^<]+?)\s*</title>', res_body.decode(), re.I)
+                if m:
+                    h = HTMLParser()
+                    print(with_color(32, "==== HTML TITLE ====\n%s\n" % h.unescape(m.group(1))))
+            elif content_type.startswith('text/') and len(res_body) < 1024:
+                res_body_text = res_body.decode()
+
+            if res_body_text:  # Se tolgo questa condizione stampa tutto il codice html
+                print(with_color(32, "==== RESPONSE BODY ====\n%s\n" % res_body_text))
+
+
     def request_handler(self, req, req_body):
+        #req.command = "POST"
         pass
 
     def response_handler(self, req, req_body, res, res_body):
         pass
 
     def save_handler(self, req, req_body, res, res_body):
-        self.print_info(req, req_body, res, res_body)
+        #self.print_info(req, req_body, res, res_body)
+        self.save_info(req, req_body,res, res_body)
 
 
 def test(HandlerClass=ProxyRequestHandler, ServerClass=ThreadingHTTPServer, protocol="HTTP/1.1"):
