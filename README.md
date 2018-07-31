@@ -1,35 +1,27 @@
 
-InterceptingProxy.  Script of an interceptin proxy
---------------------------------------------------
+# InterceptingProxy.  Script of an interceptin proxy
+
 
 Info: This is the README file for InterceptingProxy.
 Author: Regna Cristian 
 Version: 0.1.0
 
-.. index: README
-.. image:: https://travis-ci.org/XxxsiriusxxX/InterceptingProxy.svg?branch=master
-   :target: https://travis-ci.org/XxxsiriusxxX/InterceptingProxy
-
-PURPOSE
--------
+## PURPOSE
 Creation of an Intercepting Proxy Script in Python 3.
 
-INSTALLATION
-------------
+## INSTALLATION
 The first thing to do is install the local certificate:
+*Run the script setup_https_intercepts.sh
+*Add the certificate to your browser
 
--Run the script setup_https_intercepts.sh
+## USAGE
 
--Add the certificate to your browser
 
-USAGE
------
+## NOTES
 
-NOTES
------
 
-COPYRIGHT
----------
+## COPYRIGHT
+
 Copyright © 2018, Regna Cristian.
 All rights reserved.
 
