@@ -1,5 +1,5 @@
 
-# InterceptingProxy.  Script of an interceptin proxy
+# InterceptingProxy.  Script of an intercepting proxy
 
 
 Info: This is the README file for InterceptingProxy.

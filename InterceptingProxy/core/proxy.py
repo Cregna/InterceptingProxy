@@ -15,9 +15,10 @@ import json
 import re
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from socketserver import ThreadingMixIn
-from io import StringIO, BytesIO
+from io import BytesIO
 from subprocess import Popen, PIPE
 from html.parser import HTMLParser
+
 
 
 def with_color(c, s):
@@ -37,8 +38,10 @@ class Request:
         self.query = query
         self.cookie = cookie
         self.body = body
+
     def print_req(self):
-        print(self.command + " " + self.path + " " + self.request_version + "\n\nHEADER" + self.header + "\n\nQUERY-PARAMETER" + self.query + "\n\nCOOKIE" + self.cookie + "\n\nBODY REQUEST"+ self.body)
+        print("REQUEST:\n\n" + str(self.command) + " " + str(self.path) + " " + (self.request_version) + "\n\nHEADER \n\n" + str(self.header) + "\n\nQUERY-PARAMETER \n\n" + str(self.query) + "\n\nCOOKIE\n\n" + str(self.cookie) + "\n\nBODY REQUEST\n\n"+ str(self.body))
+
 
 class Response:
     def __init__(self, version, status, reason, header, set_cookie, body):
@@ -48,11 +51,9 @@ class Response:
         self.header = header
         self.set_cookie = set_cookie
         self. body = body
+
     def print_res(self):
-        print(self.version + " " + self.status + " " + self.reason + "\n\nHEADER" + self.header + "\n\nSET-COOKIE" + self.set_cookie + "\n\nRESPONSE BODY" + self.body)
-
-
-
+        print("RESPONSE\n" + str(self.version) + " " + str(self.status) + " " + str(self.reason) + "\n\nHEADER\n" + str(self.header) + "\n\nSET-COOKIE\n" + str(self.set_cookie) + "\n\nRESPONSE BODY\n" + str(self.body))
 
 
 class ThreadingHTTPServer(ThreadingMixIn, HTTPServer):
@@ -77,6 +78,9 @@ class ProxyRequestHandler(BaseHTTPRequestHandler):
     lock = threading.Lock()
     reqlist = []
     reslist = []
+
+    def log_message(self, format, *args):
+        return
 
     def __init__(self, *args, **kwargs):
         self.tls = threading.local()
@@ -239,10 +243,12 @@ class ProxyRequestHandler(BaseHTTPRequestHandler):
 
         with self.lock:
             req, req_body, conn = self.make_req()
-            self.print_request(req, req_body)
+            #self.print_request(req, req_body)
             res, res_body = self.make_res(req, req_body, conn)
-        with self.lock:
-            self.print_response(res, res_body)
+        # with self.lock:
+            # self.print_response(res, res_body)
+
+
         with self.lock:
             self.save_handler(req, req_body, res, res_body)
 
@@ -370,8 +376,6 @@ class ProxyRequestHandler(BaseHTTPRequestHandler):
             Request(req.command, req.path, req.request_version, req.headers, query_text, cookie, req_body_text))
 
         cookies = res.headers.get('Set-Cookie')
-        if cookies:
-            print(with_color(31, "==== SET-COOKIE ====\n%s\n" % cookies))
         res_body_text = ""
         if res_body is not None:
             res_body_text = None
@@ -568,20 +572,31 @@ class ProxyRequestHandler(BaseHTTPRequestHandler):
         self.save_info(req, req_body,res, res_body)
 
 
-def test(HandlerClass=ProxyRequestHandler, ServerClass=ThreadingHTTPServer, protocol="HTTP/1.1"):
-    if sys.argv[1:]:
-        port = int(sys.argv[1])
-    else:
-        port = 8080
-    server_address = ('localhost', port)
+class Proxy:
+    def __init__(self):
+        self.HandlerClass = ProxyRequestHandler
+        self.ServerClass = ThreadingHTTPServer
+        self.protocol = "HTTP/1.1"
 
-    HandlerClass.protocol_version = protocol
-    httpd = ServerClass(server_address, HandlerClass)
+    def start(self):
+        if sys.argv[1:]:
+            port = int(sys.argv[1])
+        else:
+            port = 8080
+        server_address = ('localhost', port)
 
-    sa = httpd.socket.getsockname()
-    print("Serving HTTP Proxy on", sa[0], "port", sa[1], "...")
-    httpd.serve_forever()
+        self.HandlerClass.protocol_version = self.protocol
+        httpd = self.ServerClass(server_address, self.HandlerClass)
+        httpd.serve_forever()
+
+    def get_req(self):
+        return self.HandlerClass.reqlist
+
+    def get_res(self):
+        return self.HandlerClass.reslist
 
 
 if __name__ == '__main__':
-    test()
+    Proxy = Proxy()
+    Proxy.start()
+
