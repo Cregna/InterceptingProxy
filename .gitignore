@@ -1,1 +1,6 @@
-env
+env/
+InterceptingProxy/core/certs
+InterceptingProxy/core/ca.*
+InterceptingProxy/core/cert.key
+InterceptingProxy/core/__pycache__/
+

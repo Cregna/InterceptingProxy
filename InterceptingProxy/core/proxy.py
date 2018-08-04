@@ -240,14 +240,11 @@ class ProxyRequestHandler(BaseHTTPRequestHandler):
         return res, res_body
 
     def do_GET(self):
-
-        with self.lock:
-            req, req_body, conn = self.make_req()
-            #self.print_request(req, req_body)
-            res, res_body = self.make_res(req, req_body, conn)
+        req, req_body, conn = self.make_req()
+         #self.print_request(req, req_body)
+        res, res_body = self.make_res(req, req_body, conn)
         # with self.lock:
-            # self.print_response(res, res_body)
-
+        # self.print_response(res, res_body)
 
         with self.lock:
             self.save_handler(req, req_body, res, res_body)

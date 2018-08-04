@@ -1,9 +1,9 @@
 import readline
-import proxy2
+import proxy
 import threading
 import queue
 
-p = proxy2.Proxy()
+p = proxy.Proxy()
 
 
 class Mycompleter(object):
