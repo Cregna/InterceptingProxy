@@ -30,8 +30,10 @@ def join_with_script_dir(path):
 
 
 class Request:
-    def __init__(self, command, path, request_version, header, query, cookie, body):
+    def __init__(self, id, command, host, path, request_version, header, query, cookie, body):
+        self.id = id
         self.command = command
+        self.host = host
         self.path = path
         self.request_version = request_version
         self.header = header
@@ -40,11 +42,12 @@ class Request:
         self.body = body
 
     def print_req(self):
-        print("REQUEST:\n\n" + str(self.command) + " " + str(self.path) + " " + (self.request_version) + "\n\nHEADER \n\n" + str(self.header) + "\n\nQUERY-PARAMETER \n\n" + str(self.query) + "\n\nCOOKIE\n\n" + str(self.cookie) + "\n\nBODY REQUEST\n\n"+ str(self.body))
+        print("REQUEST:\n\n" + str(self.command) + " " + str(self.path) + " " + (self.request_version) + "\n\nHEADER \n\n" + str(self.header) + "\n\nQUERY-PARAMETER \n\n" + self.query + "\n\nCOOKIE\n\n" + self.cookie + "\n\nBODY REQUEST\n\n"+ self.body)
 
 
 class Response:
-    def __init__(self, version, status, reason, header, set_cookie, body):
+    def __init__(self, id,  version, status, reason, header, set_cookie, body):
+        self.id = id
         self.version = version
         self.status = status
         self.reason = reason
@@ -53,7 +56,7 @@ class Response:
         self. body = body
 
     def print_res(self):
-        print("RESPONSE\n" + str(self.version) + " " + str(self.status) + " " + str(self.reason) + "\n\nHEADER\n" + str(self.header) + "\n\nSET-COOKIE\n" + str(self.set_cookie) + "\n\nRESPONSE BODY\n" + str(self.body))
+        print("\nRESPONSE\n" + str(self.version) + " " + str(self.status) + " " + str(self.reason) + "\n\nHEADER\n" + str(self.header) + "\n\nSET-COOKIE\n" + str(self.set_cookie) + "\n\nRESPONSE BODY\n" + str(self.body))
 
 
 class ThreadingHTTPServer(ThreadingMixIn, HTTPServer):
@@ -197,7 +200,7 @@ class ProxyRequestHandler(BaseHTTPRequestHandler):
             return
         return req, req_body, conn
 
-    def make_res(self, req, req_body, conn):
+    def make_res(self, req_body, conn):
         res = conn.getresponse()
 
         version_table = {10: 'HTTP/1.0', 11: 'HTTP/1.1'}
@@ -206,18 +209,18 @@ class ProxyRequestHandler(BaseHTTPRequestHandler):
 
         # support streaming
         if not 'Content-Length' in res.headers and 'no-store' in res.headers.get('Cache-Control', ''):
-            self.response_handler(req, req_body, res, '')
+            self.response_handler(req_body, res, '')
             setattr(res, 'headers', self.filter_headers(res.headers))
             self.relay_streaming(res)
             with self.lock:
-                self.save_handler(self.req, req_body, res, '')
+                self.save_handler(self, req_body, res, '')
             return
 
         res_body = res.read()
         content_encoding = res.headers.get('Content-Encoding', 'identity')
         res_body_plain = self.decode_content_body(res_body, content_encoding)
 
-        res_body_modified = self.response_handler(req, req_body, res, res_body_plain)
+        res_body_modified = self.response_handler(req_body, res, res_body_plain)
         if res_body_modified is False:
             self.send_error(403)
             return
@@ -237,17 +240,17 @@ class ProxyRequestHandler(BaseHTTPRequestHandler):
         else:
             pass
         self.wfile.flush()
-        return res, res_body
+        return res, res_body, res_body_plain
 
     def do_GET(self):
         req, req_body, conn = self.make_req()
          #self.print_request(req, req_body)
-        res, res_body = self.make_res(req, req_body, conn)
+        res, res_body, res_body_plain = self.make_res(req_body, conn)
         # with self.lock:
         # self.print_response(res, res_body)
 
         with self.lock:
-            self.save_handler(req, req_body, res, res_body)
+            self.save_handler(req, req_body, res, res_body_plain)
 
 
     def relay_streaming(self, res):
@@ -364,38 +367,48 @@ class ProxyRequestHandler(BaseHTTPRequestHandler):
                         req_body_text = "%s\n(%d lines)" % ('\n'.join(lines[:50]), len(lines))
                 except ValueError:
                     req_body_text = req_body
-            elif req_body:
+            elif len(req_body) < 1024:
                 req_body_text = req_body.decode()
         else:
-            req_body_text = ""
+            req_body_text = ''
 
-        self.reqlist.append(
-            Request(req.command, req.path, req.request_version, req.headers, query_text, cookie, req_body_text))
+        self.reqlist.append(Request((len(self.reqlist) + 1), req.command,req.headers.get('Host'), req.path, req.request_version, req.headers, query_text, cookie, req_body_text))
 
         cookies = res.headers.get('Set-Cookie')
-        res_body_text = ""
         if res_body is not None:
             res_body_text = None
             content_type = res.headers.get('Content-Type', '')
-
-            if content_type.startswith('application/json'):
-                try:
-                    json_obj = json.loads(res_body.decode())
-                    json_str = json.dumps(json_obj, indent=2)
-                    if json_str.count('\n') < 50:
-                        res_body_text = json_str
+            try:
+                if content_type.startswith('application/json'):
+                    try:
+                        if(isinstance(res_body, str)):
+                            json_obj = json.loads(res_body)
+                            json_str = json.dumps(json_obj, indent=2)
+                        else:
+                            json_obj = json.loads(res_body.decode())
+                            json_str = json.dumps(json_obj, indent=2)
+                        if json_str.count('\n') < 50:
+                            res_body_text = json_str
+                        else:
+                            lines = json_str.splitlines()
+                            res_body_text = "%s\n(%d lines)" % ('\n'.join(lines[:50]), len(lines))
+                    except ValueError:
+                        res_body_text = res_body
+                elif content_type.startswith('text/'):
+                    if(content_type.endswith('utf-8')):
+                        res_body_text = res_body.decode('utf-8')
+                else:
+                    if(isinstance(res_body, str)):
+                        res_body_text = res_body
                     else:
-                        lines = json_str.splitlines()
-                        res_body_text = "%s\n(%d lines)" % ('\n'.join(lines[:50]), len(lines))
-                except ValueError:
-                    res_body_text = res_body
-            elif content_type.startswith('text/html'):
-                m = re.search(r'<title[^>]*>\s*([^<]+?)\s*</title>', res_body.decode(), re.I)
-                if m:
-                    h = HTMLParser()
-            elif content_type.startswith('text/'):
-                res_body_text = res_body.decode()
-        self.reslist.append(Response(res.response_version, res.status, res.reason, res.headers, cookies, res_body_text))
+                        res_body_text = res_body.decode()
+            except ValueError:
+                #print(str(res_body) + '\n\n\n')
+                res_body_text = str(res_body)
+        else:
+            res_body_text = ''
+
+        self.reslist.append(Response((len(self.reslist) + 1), res.response_version, res.status, res.reason, res.headers, cookies, res_body_text))
 
     def print_info(self, req, req_body, res, res_body):
         def parse_qsl(s):
@@ -561,7 +574,7 @@ class ProxyRequestHandler(BaseHTTPRequestHandler):
         #req.command = "POST"
         pass
 
-    def response_handler(self, req, req_body, res, res_body):
+    def response_handler(self, req_body, res, res_body):
         pass
 
     def save_handler(self, req, req_body, res, res_body):

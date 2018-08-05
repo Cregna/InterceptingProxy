@@ -23,7 +23,6 @@ class Mycompleter(object):
             return None
 
 
-
 def exitprogram():
     print("Sto uscendo..\n")
     exit()
@@ -35,21 +34,36 @@ def help():
         print("-" + key)
     print("\n")
 
+
 def ls():
     reqlist = p.get_req()
     for x in reqlist:
         x.print_req()
+
 
 def lsr():
     reslist = p.get_res()
     for x in reslist:
         x.print_res()
 
+
+def printres():
+    reqlist = p.get_req()
+    reslist = p.get_res()
+    titles = ['ID', 'Method', 'Host', 'path', 'R-Code']
+    print('{:<4s}{:<10s}{:<30s}{:<40s}{:<30s}'.format(titles[0], titles[1], titles[2], titles[3], titles[4]))
+    for x in range(len(reqlist)):
+        lenhost = len(reqlist[x].host) + 8
+        path = (str(reqlist[x].path[lenhost: lenhost + 35]) if len(reqlist[x].path) > 30 else reqlist[x].path)
+        print('{:<4}{:<10s}{:<30s}{:<40s}{:<30s}'.format(str(reqlist[x].id), str(reqlist[x].command), str(reqlist[x].host), path + '...', str(reslist[x].status) + ' ' + str(reslist[x].reason)  ))
+
+
 mydict = {
     "exit": exitprogram,
     "help": help,
     "ls": ls,
-    "lsr": lsr
+    "lsr": lsr,
+    "printres": printres
 }
 
 
