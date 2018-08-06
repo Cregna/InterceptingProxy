@@ -32,7 +32,8 @@ def help():
     print("\nList of command: ")
     for key in mydict:
         print("-" + key)
-    print("\n")
+    for key in mydict2:
+        print('-' + key)
 
 
 def ls():
@@ -54,8 +55,27 @@ def printres():
     print('{:<4s}{:<10s}{:<30s}{:<40s}{:<30s}'.format(titles[0], titles[1], titles[2], titles[3], titles[4]))
     for x in range(len(reqlist)):
         lenhost = len(reqlist[x].host) + 8
-        path = (str(reqlist[x].path[lenhost: lenhost + 35]) if len(reqlist[x].path) > 30 else reqlist[x].path)
-        print('{:<4}{:<10s}{:<30s}{:<40s}{:<30s}'.format(str(reqlist[x].id), str(reqlist[x].command), str(reqlist[x].host), path + '...', str(reslist[x].status) + ' ' + str(reslist[x].reason)  ))
+        path = ((str(reqlist[x].path[lenhost: lenhost + 35]) + '...') if len(reqlist[x].path) - lenhost > 30 else reqlist[x].path[lenhost:])
+        print('{:<4}{:<10s}{:<30s}{:<40s}{:<30s}'.format(str(reqlist[x].id), str(reqlist[x].command), str(reqlist[x].host), path, str(reslist[x].status) + ' ' + str(reslist[x].reason)  ))
+    print('\n')
+
+def viewreq(number):
+    number = int(number)
+    reqlist = p.get_req()
+    if number > len(reqlist):
+        print('Wrong ID number')
+    else:
+        print(reqlist[number-1].print_req())
+
+
+
+def viewres(number):
+    number = int(number)
+    reslist = p.get_res()
+    if number > len(reslist):
+        print('Wrong ID number')
+    else:
+        print(reslist[number-1].print_res())
 
 
 mydict = {
@@ -66,6 +86,11 @@ mydict = {
     "printres": printres
 }
 
+mydict2 = {
+    'viewreq': viewreq,
+    'viewres': viewres
+}
+
 
 class Interpreter(object):
     def __init__(self, text):
@@ -74,10 +99,21 @@ class Interpreter(object):
     def didfunc(self):
         found = False
         for key in mydict:
+            command = self.text.split(' ')
             if key == self.text:
-                mydict[self.text]()
-                found = True
-        if(not found):
+                if len(command) == 1:
+                    mydict[self.text]()
+                    found = True
+                else:
+                    print('too much argument')
+        for key2 in mydict2:
+            if command[0] == key2:
+                if len(command) == 2:
+                    mydict2[command[0]](command[1])
+                    found = True
+                else:
+                    print('Too much Argument')
+        if not found:
             print("Command not found, use help for a list of command")
 
 
