@@ -42,7 +42,7 @@ class Request:
         self.body = body
 
     def print_req(self):
-        print("REQUEST:\n\n" + str(self.command) + " " + str(self.path) + " " + (self.request_version) + "\n\nHEADER \n\n" + str(self.header) + "\n\nQUERY-PARAMETER \n\n" + self.query + "\n\nCOOKIE\n\n" + self.cookie + "\n\nBODY REQUEST\n\n"+ self.body)
+        print("\nREQUEST number:" + str(self.id) + '\n' + str(self.command) + " " + str(self.path) + " " + (self.request_version) + "\n\nHEADER\n\n" + str(self.header) + "\n\nQUERY-PARAMETER \n\n" + self.query + "\n\nCOOKIE\n\n" + self.cookie + "\n\nBODY REQUEST\n\n"+ self.body)
 
 
 class Response:
@@ -56,7 +56,7 @@ class Response:
         self. body = body
 
     def print_res(self):
-        print("\nRESPONSE\n" + str(self.version) + " " + str(self.status) + " " + str(self.reason) + "\n\nHEADER\n" + str(self.header) + "\n\nSET-COOKIE\n" + str(self.set_cookie) + "\n\nRESPONSE BODY\n" + str(self.body))
+        print("\nRESPONSE number: " + str(self.id) + '\n' + str(self.version) + " " + str(self.status) + " " + str(self.reason) + "\nHEADER\n" + str(self.header) + "\n\nSET-COOKIE\n" + str(self.set_cookie) + "\nRESPONSE BODY\n" + str(self.body))
 
 
 class ThreadingHTTPServer(ThreadingMixIn, HTTPServer):
@@ -81,6 +81,7 @@ class ProxyRequestHandler(BaseHTTPRequestHandler):
     lock = threading.Lock()
     reqlist = []
     reslist = []
+    mode = 'Sniffing'
 
     def log_message(self, format, *args):
         return
@@ -200,6 +201,25 @@ class ProxyRequestHandler(BaseHTTPRequestHandler):
             return
         return req, req_body, conn
 
+    def make_ownreq(self, request):
+        u = urllib.parse.urlsplit(request.path)
+        scheme, netloc, path = u.scheme, u.netloc, (u.path + '?' + u.query if u.query else u.path)
+        assert scheme in ('http', 'https')
+        if netloc:
+            request.header['Host'] = netloc
+        setattr(request, 'headers', self.filter_headers(request.header))
+        origin = (scheme, netloc)
+        if not origin in self.tls.conns:
+            if scheme == 'https':
+                    self.tls.conns[origin] = http.client.HTTPSConnection(netloc, timeout=self.timeout)
+            else:
+                self.tls.conns[origin] = http.client.HTTPConnection(netloc, timeout=self.timeout)
+        conn = self.tls.conns[origin]
+        conn.request(self.command, path, request.body, dict(request.header))
+        return conn
+
+
+
     def make_res(self, req_body, conn):
         res = conn.getresponse()
 
@@ -243,14 +263,25 @@ class ProxyRequestHandler(BaseHTTPRequestHandler):
         return res, res_body, res_body_plain
 
     def do_GET(self):
-        req, req_body, conn = self.make_req()
-         #self.print_request(req, req_body)
-        res, res_body, res_body_plain = self.make_res(req_body, conn)
-        # with self.lock:
-        # self.print_response(res, res_body)
+        if self.mode == 'Sniffing':
+            req, req_body, conn = self.make_req()
+             #self.print_request(req, req_body)
+            res, res_body, res_body_plain = self.make_res(req_body, conn)
+            # with self.lock:
+            # self.print_response(res, res_body)
+            with self.lock:
+                self.save_handler(req, req_body, res, res_body_plain)
 
-        with self.lock:
-            self.save_handler(req, req_body, res, res_body_plain)
+        if self.mode == 'Intercepting':
+            with self.lock:
+                req, req_body, conn = self.make_req()
+                input('Premi invio per continuare')
+                self.print_request(req, req_body)
+            with self.lock:
+                res, res_body, res_body_plain = self.make_res(req_body, conn)
+                input('Premi invio per continuare')
+                self.print_response(res, res_body_plain)
+
 
 
     def relay_streaming(self, res):
@@ -372,7 +403,7 @@ class ProxyRequestHandler(BaseHTTPRequestHandler):
         else:
             req_body_text = ''
 
-        self.reqlist.append(Request((len(self.reqlist) + 1), req.command,req.headers.get('Host'), req.path, req.request_version, req.headers, query_text, cookie, req_body_text))
+        self.reqlist.append(Request((len(self.reqlist) + 1), req.command, req.headers.get('Host'), req.path, req.request_version, req.headers, query_text, cookie, req_body_text))
 
         cookies = res.headers.get('Set-Cookie')
         if res_body is not None:
@@ -569,7 +600,6 @@ class ProxyRequestHandler(BaseHTTPRequestHandler):
             if res_body_text:  # Se tolgo questa condizione stampa tutto il codice html
                 print(with_color(32, "==== RESPONSE BODY ====\n%s\n" % res_body_text))
 
-
     def request_handler(self, req, req_body):
         #req.command = "POST"
         pass
@@ -587,6 +617,7 @@ class Proxy:
         self.HandlerClass = ProxyRequestHandler
         self.ServerClass = ThreadingHTTPServer
         self.protocol = "HTTP/1.1"
+        self.httpd = None
 
     def start(self):
         if sys.argv[1:]:
@@ -596,8 +627,29 @@ class Proxy:
         server_address = ('localhost', port)
 
         self.HandlerClass.protocol_version = self.protocol
-        httpd = self.ServerClass(server_address, self.HandlerClass)
-        httpd.serve_forever()
+        self.httpd = self.ServerClass(server_address, self.HandlerClass)
+        self.httpd.serve_forever()
+
+    def start_intercept(self):
+        self.HandlerClass.mode = 'Intercepting'
+
+    def start_sniffing(self):
+        self.HandlerClass.mode = 'Sniffing'
+
+    def get_srequest(self):
+        return self.HandlerClass
+
+    def requestpost(self, request1):
+        request1.command = 'POST'
+        conn = self.HandlerClass.make_ownreq(self.HandlerClass, request1)
+        body = request1.body
+        res, res_body, res_body_plain = self.HandlerClass.make_res(body, conn)
+        self.HandlerClass.print_response(res,res_body_plain)
+
+        #self.HandlerClass.request_handler(self, req, req_body)
+
+    def close(self):
+        self.httpd.shutdown()
 
     def get_req(self):
         return self.HandlerClass.reqlist

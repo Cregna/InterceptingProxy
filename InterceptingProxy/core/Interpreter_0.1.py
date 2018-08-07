@@ -25,6 +25,7 @@ class Mycompleter(object):
 
 def exitprogram():
     print("Sto uscendo..\n")
+    p.close()
     exit()
 
 
@@ -59,6 +60,7 @@ def printres():
         print('{:<4}{:<10s}{:<30s}{:<40s}{:<30s}'.format(str(reqlist[x].id), str(reqlist[x].command), str(reqlist[x].host), path, str(reslist[x].status) + ' ' + str(reslist[x].reason)  ))
     print('\n')
 
+
 def viewreq(number):
     number = int(number)
     reqlist = p.get_req()
@@ -66,7 +68,6 @@ def viewreq(number):
         print('Wrong ID number')
     else:
         print(reqlist[number-1].print_req())
-
 
 
 def viewres(number):
@@ -78,17 +79,38 @@ def viewres(number):
         print(reslist[number-1].print_res())
 
 
+def intercept():
+    p.start_intercept()
+
+
+def sniffing():
+    p.start_sniffing()
+
+
+def requestpost(number):
+    number = int(number)
+    reqlist = p.get_req()
+    if number > len(reqlist):
+        print('Wrong ID number')
+    else:
+        p.requestpost(reqlist[number-1])
+
+
 mydict = {
     "exit": exitprogram,
     "help": help,
     "ls": ls,
     "lsr": lsr,
-    "printres": printres
+    "printres": printres,
+    "intercept": intercept,
+    "sniffing": sniffing
 }
 
 mydict2 = {
     'viewreq': viewreq,
-    'viewres': viewres
+    'viewres': viewres,
+    "requestpost": requestpost
+
 }
 
 
@@ -140,11 +162,13 @@ def inte():
 
 
 def main():
-    t = threading.Thread(target=sproxy)
-    t2 = threading.Thread(target=inte)
-
-    t2.start()
-    t.start()
+    try:
+        t = threading.Thread(target=sproxy)
+        t2 = threading.Thread(target=inte)
+        t.start()
+        t2.start()
+    except KeyboardInterrupt:
+        exit()
 
 
 if __name__ == '__main__':
