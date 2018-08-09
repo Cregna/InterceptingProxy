@@ -1,7 +1,9 @@
 import readline
 import proxy
 import threading
-import queue
+import editor
+from http.server import BaseHTTPRequestHandler
+from io import BytesIO
 
 p = proxy.Proxy()
 
@@ -21,6 +23,20 @@ class Mycompleter(object):
             return self.matches[state]
         except IndexError:
             return None
+
+class HTTPRequest(BaseHTTPRequestHandler):
+    lock = threading.Lock()
+
+    def __init__(self, request_text):
+        self.rfile = BytesIO(request_text)
+        self.raw_requestline = self.rfile.readline()
+        self.error_code = self.error_message = None
+        self.parse_request()
+
+
+    def send_error(self, code, message):
+        self.error_code = code
+        self.error_message = message
 
 
 def exitprogram():
@@ -87,6 +103,16 @@ def sniffing():
     p.start_sniffing()
 
 
+def w(number):
+    number = int(number)
+    reqlist = p.get_req()
+    if number > len(reqlist):
+        print('Wrong ID number')
+    else:
+        strreq = editor.edit(contents= reqlist[number - 1].__str__().encode())
+        request = HTTPRequest(strreq)
+        p.requestpost(request)
+
 def requestpost(number):
     number = int(number)
     reqlist = p.get_req()
@@ -109,7 +135,8 @@ mydict = {
 mydict2 = {
     'viewreq': viewreq,
     'viewres': viewres,
-    "requestpost": requestpost
+    "requestpost": requestpost,
+    'w': w
 
 }
 

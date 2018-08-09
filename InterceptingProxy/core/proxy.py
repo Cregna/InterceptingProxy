@@ -19,7 +19,7 @@ from io import BytesIO
 from subprocess import Popen, PIPE
 from html.parser import HTMLParser
 
-
+is_modified = False
 
 def with_color(c, s):
     return "\x1b[%dm%s\x1b[0m" % (c, s)
@@ -29,7 +29,9 @@ def join_with_script_dir(path):
     return os.path.join(os.path.dirname(os.path.abspath(__file__)), path)
 
 
-class Request:
+
+
+class Request(object):
     def __init__(self, id, command, host, path, request_version, header, query, cookie, body):
         self.id = id
         self.command = command
@@ -44,8 +46,10 @@ class Request:
     def print_req(self):
         print("\nREQUEST number:" + str(self.id) + '\n' + str(self.command) + " " + str(self.path) + " " + (self.request_version) + "\n\nHEADER\n\n" + str(self.header) + "\n\nQUERY-PARAMETER \n\n" + self.query + "\n\nCOOKIE\n\n" + self.cookie + "\n\nBODY REQUEST\n\n"+ self.body)
 
-
-class Response:
+    def __str__(self):
+        return  str(self.command)+ " " + str(self.path)+ " " + str(self.request_version) + "\r\n" +str(self.header) + '\r\n' + str(self.query) + '\r\n '+ self.cookie + '\r\n' + self.body + '\r\n'
+1
+class Response(object):
     def __init__(self, id,  version, status, reason, header, set_cookie, body):
         self.id = id
         self.version = version
@@ -81,6 +85,7 @@ class ProxyRequestHandler(BaseHTTPRequestHandler):
     lock = threading.Lock()
     reqlist = []
     reslist = []
+    request = Request
     mode = 'Sniffing'
 
     def log_message(self, format, *args):
@@ -201,23 +206,29 @@ class ProxyRequestHandler(BaseHTTPRequestHandler):
             return
         return req, req_body, conn
 
-    def make_ownreq(self, request):
-        u = urllib.parse.urlsplit(request.path)
+    def make_ownreq(self):
+        req = self.request
+        content_length = int(req.headers.get('Content-Length', 0))
+        req_body = self.rfile.read(content_length) if content_length else None
+        if req.path[0] == '/':
+            if isinstance(self.connection, ssl.SSLSocket):
+                req.path = "https://%s%s" % (req.headers['Host'], req.path)
+            else:
+                req.path = "http://%s%s" % (req.headers['Host'], req.path)
+        u = urllib.parse.urlsplit(req.path)
         scheme, netloc, path = u.scheme, u.netloc, (u.path + '?' + u.query if u.query else u.path)
         assert scheme in ('http', 'https')
         if netloc:
-            request.header['Host'] = netloc
-        setattr(request, 'headers', self.filter_headers(request.header))
+            req.headers['Host'] = netloc
+        setattr(req, 'headers', self.filter_headers(self, req.headers))
         origin = (scheme, netloc)
-        if not origin in self.tls.conns:
-            if scheme == 'https':
-                    self.tls.conns[origin] = http.client.HTTPSConnection(netloc, timeout=self.timeout)
-            else:
-                self.tls.conns[origin] = http.client.HTTPConnection(netloc, timeout=self.timeout)
-        conn = self.tls.conns[origin]
-        conn.request(self.command, path, request.body, dict(request.header))
-        return conn
-
+        if scheme == 'https':
+            conns = http.client.HTTPSConnection(netloc, timeout=self.timeout)
+        else:
+            conns = http.client.HTTPConnection(netloc, timeout=self.timeout)
+        conn = conns
+        conn.request(req.command, path, req_body, dict(req.headers))
+        return req_body, conn
 
 
     def make_res(self, req_body, conn):
@@ -250,7 +261,6 @@ class ProxyRequestHandler(BaseHTTPRequestHandler):
             res.headers['Content-Length'] = str(len(res_body))
 
         setattr(res, 'headers', self.filter_headers(res.headers))
-
         self.send_response(res.status, res.reason)
         for line in res.headers.items():
             self.send_header(line[0], line[1])
@@ -262,27 +272,56 @@ class ProxyRequestHandler(BaseHTTPRequestHandler):
         self.wfile.flush()
         return res, res_body, res_body_plain
 
+    def make_ownres(self, req_body, conn):
+        res = conn.getresponse()
+
+        version_table = {10: 'HTTP/1.0', 11: 'HTTP/1.1'}
+        setattr(res, 'headers', res.msg)
+        setattr(res, 'response_version', version_table[res.version])
+
+        # support streaming
+        if not 'Content-Length' in res.headers and 'no-store' in res.headers.get('Cache-Control', ''):
+            self.response_handler(req_body, res, '')
+            setattr(res, 'headers', self.filter_headers(self, res.headers))
+            self.relay_streaming(res)
+            with self.lock:
+                self.save_handler(self, req_body, res, '')
+            return
+
+        res_body = res.read()
+        content_encoding = res.headers.get('Content-Encoding', 'identity')
+        res_body_plain = self.decode_content_body(self, res_body, content_encoding)
+
+        setattr(res, 'headers', self.filter_headers(self, res.headers))
+        return res, res_body, res_body_plain
+
     def do_GET(self):
-        if self.mode == 'Sniffing':
-            req, req_body, conn = self.make_req()
-             #self.print_request(req, req_body)
-            res, res_body, res_body_plain = self.make_res(req_body, conn)
-            # with self.lock:
-            # self.print_response(res, res_body)
-            with self.lock:
-                self.save_handler(req, req_body, res, res_body_plain)
-
-        if self.mode == 'Intercepting':
-            with self.lock:
+        global is_modified
+        if is_modified == False:
+            if self.mode == 'Sniffing':
                 req, req_body, conn = self.make_req()
-                input('Premi invio per continuare')
-                self.print_request(req, req_body)
-            with self.lock:
+                 #self.print_request(req, req_body)
                 res, res_body, res_body_plain = self.make_res(req_body, conn)
-                input('Premi invio per continuare')
-                self.print_response(res, res_body_plain)
+                # with self.lock:
+                # self.print_response(res, res_body)
+                with self.lock:
+                    self.save_handler(req, req_body, res, res_body_plain)
 
+            if self.mode == 'Intercepting':
+                    if (input('Premi invio per continuare') == 'sniffing'):
+                        self.mode = 'Sniffing'
+                    else:
+                        req, req_body, conn = self.make_req()
+                        self.print_request(req, req_body)
+                        res, res_body, res_body_plain = self.make_res(req_body, conn)
+                        self.print_response(res, res_body_plain)
 
+        if is_modified == True:
+
+            req_body, conn = self.make_ownreq(self)
+            res, res_body, res_body_plain = self.make_ownres(self, req_body, conn)
+            self.print_response(self, res, res_body_plain)
+            is_modified = False
 
     def relay_streaming(self, res):
         self.send_response(res.status, res.reason)
@@ -589,13 +628,13 @@ class ProxyRequestHandler(BaseHTTPRequestHandler):
                         res_body_text = "%s\n(%d lines)" % ('\n'.join(lines[:50]), len(lines))
                 except ValueError:
                     res_body_text = res_body.decode()
+            elif content_type.startswith('text/'):
+                res_body_text = res_body.decode()
             elif content_type.startswith('text/html'):
                 m = re.search(r'<title[^>]*>\s*([^<]+?)\s*</title>', res_body.decode(), re.I)
                 if m:
                     h = HTMLParser()
                     print(with_color(32, "==== HTML TITLE ====\n%s\n" % h.unescape(m.group(1))))
-            elif content_type.startswith('text/') and len(res_body) < 1024:
-                res_body_text = res_body.decode()
 
             if res_body_text:  # Se tolgo questa condizione stampa tutto il codice html
                 print(with_color(32, "==== RESPONSE BODY ====\n%s\n" % res_body_text))
@@ -640,11 +679,10 @@ class Proxy:
         return self.HandlerClass
 
     def requestpost(self, request1):
-        request1.command = 'POST'
-        conn = self.HandlerClass.make_ownreq(self.HandlerClass, request1)
-        body = request1.body
-        res, res_body, res_body_plain = self.HandlerClass.make_res(body, conn)
-        self.HandlerClass.print_response(res,res_body_plain)
+        self.HandlerClass.request = request1
+        global is_modified
+        is_modified = True
+        self.HandlerClass.do_GET(self.HandlerClass)
 
         #self.HandlerClass.request_handler(self, req, req_body)
 
