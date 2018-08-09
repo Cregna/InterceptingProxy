@@ -47,7 +47,7 @@ class Request(object):
         print("\nREQUEST number:" + str(self.id) + '\n' + str(self.command) + " " + str(self.path) + " " + (self.request_version) + "\n\nHEADER\n\n" + str(self.header) + "\n\nQUERY-PARAMETER \n\n" + self.query + "\n\nCOOKIE\n\n" + self.cookie + "\n\nBODY REQUEST\n\n"+ self.body)
 
     def __str__(self):
-        return  str(self.command)+ " " + str(self.path)+ " " + str(self.request_version) + "\r\n" +str(self.header) + '\r\n' + str(self.query) + '\r\n '+ self.cookie + '\r\n' + self.body + '\r\n'
+        return  str(self.command) + " " + str(self.path)+ " " + str(self.request_version) + str(self.header) + '\r\n' + str(self.body) + '\r\n'
 1
 class Response(object):
     def __init__(self, id,  version, status, reason, header, set_cookie, body):
@@ -57,11 +57,13 @@ class Response(object):
         self.reason = reason
         self.header = header
         self.set_cookie = set_cookie
-        self. body = body
+        self.body = body
 
     def print_res(self):
         print("\nRESPONSE number: " + str(self.id) + '\n' + str(self.version) + " " + str(self.status) + " " + str(self.reason) + "\nHEADER\n" + str(self.header) + "\n\nSET-COOKIE\n" + str(self.set_cookie) + "\nRESPONSE BODY\n" + str(self.body))
 
+    def __str__(self):
+        return str(self.version) + ' ' + str(self.status) + ' ' + str(self.reason) + "\r\n" + str(self.header) + '\r\n' + str(self.body)
 
 class ThreadingHTTPServer(ThreadingMixIn, HTTPServer):
     address_family = socket.AF_INET
@@ -81,7 +83,7 @@ class ProxyRequestHandler(BaseHTTPRequestHandler):
     cacert = join_with_script_dir('ca.crt')
     certkey = join_with_script_dir('cert.key')
     certdir = join_with_script_dir('certs/')
-    timeout = 5
+    timeout = 20
     lock = threading.Lock()
     reqlist = []
     reslist = []
@@ -168,7 +170,7 @@ class ProxyRequestHandler(BaseHTTPRequestHandler):
     def make_req(self):
         req = self
         content_length = int(req.headers.get('Content-Length', 0))
-        req_body = self.rfile.read(content_length) if content_length else None
+        req_body = self.rfile.read(content_length) if content_length else ''
 
         if req.path[0] == '/':
             if isinstance(self.connection, ssl.SSLSocket):
@@ -203,8 +205,7 @@ class ProxyRequestHandler(BaseHTTPRequestHandler):
             if origin in self.tls.conns:
                 del self.tls.conns[origin]
             self.send_error(502)
-            return
-        return req, req_body, conn
+        return (req, req_body, conn)
 
     def make_ownreq(self):
         req = self.request
@@ -245,20 +246,19 @@ class ProxyRequestHandler(BaseHTTPRequestHandler):
             self.relay_streaming(res)
             with self.lock:
                 self.save_handler(self, req_body, res, '')
-            return
+            return res, '', ''
 
         res_body = res.read()
         content_encoding = res.headers.get('Content-Encoding', 'identity')
         res_body_plain = self.decode_content_body(res_body, content_encoding)
-
-        res_body_modified = self.response_handler(req_body, res, res_body_plain)
-        if res_body_modified is False:
-            self.send_error(403)
-            return
-        elif res_body_modified is not None:
-            res_body_plain = res_body_modified
-            res_body = self.encode_content_body(res_body_plain, content_encoding)
-            res.headers['Content-Length'] = str(len(res_body))
+        #res_body_modified = self.response_handler(req_body, res, res_body_plain)
+        #if res_body_modified is False:
+        #    self.send_error(403)
+        #    return
+        #elif res_body_modified is not None:
+        #    res_body_plain = res_body_modified
+        #    res_body = self.encode_content_body(res_body_plain, content_encoding)
+        #    res.headers['Content-Length'] = str(len(res_body))
 
         setattr(res, 'headers', self.filter_headers(res.headers))
         self.send_response(res.status, res.reason)
@@ -267,8 +267,6 @@ class ProxyRequestHandler(BaseHTTPRequestHandler):
         self.end_headers()
         if(res_body != b''):
             self.wfile.write(res_body)
-        else:
-            pass
         self.wfile.flush()
         return res, res_body, res_body_plain
 
@@ -300,14 +298,11 @@ class ProxyRequestHandler(BaseHTTPRequestHandler):
         if is_modified == False:
             if self.mode == 'Sniffing':
                 req, req_body, conn = self.make_req()
-                 #self.print_request(req, req_body)
                 res, res_body, res_body_plain = self.make_res(req_body, conn)
-                # with self.lock:
-                # self.print_response(res, res_body)
                 with self.lock:
                     self.save_handler(req, req_body, res, res_body_plain)
 
-            if self.mode == 'Intercepting':
+                if self.mode == 'Intercepting':
                     if (input('Premi invio per continuare') == 'sniffing'):
                         self.mode = 'Sniffing'
                     else:
@@ -420,12 +415,13 @@ class ProxyRequestHandler(BaseHTTPRequestHandler):
         if auth.lower().startswith('basic'):
             token = auth.split()[1].decode('base64')
 
-        if req_body is not None:
+        if req_body is not '':
             req_body_text = None
             content_type = req.headers.get('Content-Type', '')
 
             if content_type.startswith('application/x-www-form-urlencoded'):
-                req_body_text = parse_qsl(req_body.decode('utf-8'))
+                #req_body_text = parse_qsl(req_body.decode('utf-8'))
+                req_body_text = req_body.decode('utf-8')
             elif content_type.startswith('application/json'):
                 try:
                     json_obj = json.loads(req_body.decode())
@@ -465,9 +461,6 @@ class ProxyRequestHandler(BaseHTTPRequestHandler):
                     except ValueError:
                         res_body_text = res_body
                 elif content_type.startswith('text/'):
-                    if(content_type.endswith('utf-8')):
-                        res_body_text = res_body.decode('utf-8')
-                else:
                     if(isinstance(res_body, str)):
                         res_body_text = res_body
                     else:
@@ -475,8 +468,6 @@ class ProxyRequestHandler(BaseHTTPRequestHandler):
             except ValueError:
                 #print(str(res_body) + '\n\n\n')
                 res_body_text = str(res_body)
-        else:
-            res_body_text = ''
 
         self.reslist.append(Response((len(self.reslist) + 1), res.response_version, res.status, res.reason, res.headers, cookies, res_body_text))
 
@@ -678,7 +669,7 @@ class Proxy:
     def get_srequest(self):
         return self.HandlerClass
 
-    def requestpost(self, request1):
+    def modify(self, request1):
         self.HandlerClass.request = request1
         global is_modified
         is_modified = True
