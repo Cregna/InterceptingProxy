@@ -1,10 +1,10 @@
-* Hight priority
-    * Fix Bug
-    * encoding problem_ troubleshooting with exception
-* Medium priority 
-    * create mod sniffing mode  e intercepting mode
-    * improve interpreter 
-    * create ls5 print the last five request (Method -- Host -- Path -- response code(200)
+* Hight priority 
+    * Refactor
+    * Command
+        * p (print last 10 transaction)
+        * p [val] (print last val transactions)
+        * i [val] (print val request + response)
+        * m [val] (modify val request)
     * create function print color (pygments)
-* Low priority
+* Medium priority 
     * save requeste in database session. create at the open of the file, two tables: request and response
