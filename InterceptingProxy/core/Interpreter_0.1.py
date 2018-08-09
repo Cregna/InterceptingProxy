@@ -4,6 +4,7 @@ import threading
 import editor
 from http.server import BaseHTTPRequestHandler
 from io import BytesIO
+from colors import red,green,blue,cyan,yellow
 
 p = proxy.Proxy()
 
@@ -127,8 +128,8 @@ def printsingle(number):
     if number > len(reqlist):
         print('Wrong ID number')
     else:
-        print(with_color(33, reqlist[number - 1].__str__()))
-        print(with_color(32, reslist[number -1].__str__()))
+        print(yellow(reqlist[number - 1].__str__()))
+        print(green(reslist[number -1].__str__()))
 
 
 mydict = {

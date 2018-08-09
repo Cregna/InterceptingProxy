@@ -47,7 +47,7 @@ class Request(object):
         print("\nREQUEST number:" + str(self.id) + '\n' + str(self.command) + " " + str(self.path) + " " + (self.request_version) + "\n\nHEADER\n\n" + str(self.header) + "\n\nQUERY-PARAMETER \n\n" + self.query + "\n\nCOOKIE\n\n" + self.cookie + "\n\nBODY REQUEST\n\n"+ self.body)
 
     def __str__(self):
-        return  str(self.command) + " " + str(self.path)+ " " + str(self.request_version) + str(self.header) + '\r\n' + str(self.body) + '\r\n'
+        return  str(self.command) + " " + str(self.path)+ " " + str(self.request_version) + '\r\n' + str(self.header) + '\r\n' + str(self.body) + '\r\n'
 1
 class Response(object):
     def __init__(self, id,  version, status, reason, header, set_cookie, body):
@@ -250,7 +250,10 @@ class ProxyRequestHandler(BaseHTTPRequestHandler):
 
         res_body = res.read()
         content_encoding = res.headers.get('Content-Encoding', 'identity')
-        res_body_plain = self.decode_content_body(res_body, content_encoding)
+        if res_body is not None:
+            res_body_plain = self.decode_content_body(res_body, content_encoding)
+        else:
+            res_body_plain = ''
         #res_body_modified = self.response_handler(req_body, res, res_body_plain)
         #if res_body_modified is False:
         #    self.send_error(403)
@@ -441,8 +444,8 @@ class ProxyRequestHandler(BaseHTTPRequestHandler):
         self.reqlist.append(Request((len(self.reqlist) + 1), req.command, req.headers.get('Host'), req.path, req.request_version, req.headers, query_text, cookie, req_body_text))
 
         cookies = res.headers.get('Set-Cookie')
-        if res_body is not None:
-            res_body_text = None
+        if res_body is not '':
+            res_body_text = ''
             content_type = res.headers.get('Content-Type', '')
             try:
                 if content_type.startswith('application/json'):
@@ -600,12 +603,12 @@ class ProxyRequestHandler(BaseHTTPRequestHandler):
         res_header_text = "%s %d %s\n%s" % (res.response_version, res.status, res.reason, res.headers)
         print(with_color(36, res_header_text))
         cookies = res.headers.get('Set-Cookie')
+        res_body_text = ' '
         if cookies:
             # cookies = '\n'.join(cookies)
             print(with_color(31, "==== SET-COOKIE ====\n%s\n" % cookies))
 
         if res_body is not None:
-            res_body_text = None
             content_type = res.headers.get('Content-Type', '')
 
             if content_type.startswith('application/json'):
@@ -621,14 +624,8 @@ class ProxyRequestHandler(BaseHTTPRequestHandler):
                     res_body_text = res_body.decode()
             elif content_type.startswith('text/'):
                 res_body_text = res_body.decode()
-            elif content_type.startswith('text/html'):
-                m = re.search(r'<title[^>]*>\s*([^<]+?)\s*</title>', res_body.decode(), re.I)
-                if m:
-                    h = HTMLParser()
-                    print(with_color(32, "==== HTML TITLE ====\n%s\n" % h.unescape(m.group(1))))
-
-            if res_body_text:  # Se tolgo questa condizione stampa tutto il codice html
-                print(with_color(32, "==== RESPONSE BODY ====\n%s\n" % res_body_text))
+        if res_body_text != '':
+            print(with_color(32, res_body_text))
 
     def request_handler(self, req, req_body):
         #req.command = "POST"
