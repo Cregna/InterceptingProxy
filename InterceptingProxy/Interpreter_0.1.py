@@ -1,16 +1,12 @@
 import readline
-import proxy
 import threading
 import editor
 from http.server import BaseHTTPRequestHandler
 from io import BytesIO
 from inspect import signature
 from colors import red,green,blue,cyan,yellow
-
-p = proxy.Proxy()
-
-def with_color(c, s):
-    return "\x1b[%dm%s\x1b[0m" % (c, s)
+from core.proxyinterface import Proxy
+p = Proxy()
 
 
 class Mycompleter(object):
@@ -203,7 +199,7 @@ $$ |                          $$ |
             completer = Mycompleter(mydict)
             readline.set_completer(completer.complete)
             readline.parse_and_bind("tab: complete")
-            text = input('purp >>> ')
+            text = input('>>> ')
         except KeyboardInterrupt:
             pass
         except EOFError:
