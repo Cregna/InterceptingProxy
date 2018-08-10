@@ -136,7 +136,9 @@ mydict = {
     "help": help,
     'p': printa,
     'i': printsingle,
-    'm': modify
+    'm': modify,
+    'sniffing': sniffing,
+    'intercept': intercept
 }
 
 mydict2 = {

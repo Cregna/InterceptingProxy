@@ -13,6 +13,7 @@ import zlib
 import time
 import json
 import re
+import editor
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from socketserver import ThreadingMixIn
 from io import BytesIO
@@ -130,7 +131,7 @@ class ProxyRequestHandler(BaseHTTPRequestHandler):
                     break
                 other.sendall(data)
 
-    def make_req(self):
+    def prepare_req(self):
         req = self
         content_length = int(req.headers.get('Content-Length', 0))
         req_body = self.rfile.read(content_length) if content_length else ''
@@ -151,7 +152,17 @@ class ProxyRequestHandler(BaseHTTPRequestHandler):
                 else:
                     self.tls.conns[origin] = http.client.HTTPConnection(netloc, timeout=self.timeout)
             conn = self.tls.conns[origin]
-            conn.request(self.command, path, req_body, dict(req.headers))
+        except Exception as e:
+            if origin in self.tls.conns:
+                del self.tls.conns[origin]
+            self.send_error(502)
+        return req, req_body, conn, path, req.headers
+
+    def make_req(self,issniffing=True):
+        try:
+            req, req_body, conn, path, headers = self.prepare_req()
+            if issniffing:
+                conn.request(self.command, path, req_body, dict(headers))
         except Exception as e:
             if origin in self.tls.conns:
                 del self.tls.conns[origin]
@@ -238,6 +249,13 @@ class ProxyRequestHandler(BaseHTTPRequestHandler):
         setattr(res, 'headers', self.filter_headers(self, res.headers))
         return res, res_body, res_body_plain
 
+    def modify(self,req,req_body):
+        str = "{} {} {}\r\n{}\n\r{}\r\n".format(req.command, req.path, req.request_version, req.headers, req_body)
+        strreq = editor.edit(contents=str.encode())
+        print(strreq.decode())
+
+
+
     def do_GET(self, is_modified=False):
         if not is_modified:
             if self.mode == 'Sniffing':
@@ -247,14 +265,18 @@ class ProxyRequestHandler(BaseHTTPRequestHandler):
                     self.save_req(req, req_body)
                     self.save_response(res, res_body_plain)
 
-                if self.mode == 'Intercepting':
-                    if input('Premi invio per continuare') == 'sniffing':
-                        self.mode = 'Sniffing'
-                    else:
-                        req, req_body, conn = self.make_req()
-                        self.print_request(req, req_body)
-                        res, res_body, res_body_plain = self.make_res(req_body, conn)
-                        self.print_response(res, res_body_plain)
+            if self.mode == 'Intercepting':
+                #with self.lock:
+                req, req_body, conn, path, req.headers = self.prepare_req()
+                self.print_request(req, req_body)
+                text = input('n for go on, r to modify the request ')
+                if text == 'n':
+                    req, req_body, conn = self.make_req()
+                    res, res_body, res_body_plain = self.make_res(conn)
+                    self.print_response(res, res_body_plain)
+                if text == 'r':
+                    _thread.start_new_thread(self.modify(req,req_body))
+                    self.modify(req, req_body)
 
         if is_modified:
             req_body, conn = self.make_ownreq(self)
