@@ -18,11 +18,9 @@ from socketserver import ThreadingMixIn
 from io import BytesIO
 from subprocess import Popen, PIPE
 from html.parser import HTMLParser
+from colors import red,green,blue,cyan,yellow
 
 is_modified = False
-
-def with_color(c, s):
-    return "\x1b[%dm%s\x1b[0m" % (c, s)
 
 
 def join_with_script_dir(path):
@@ -210,7 +208,7 @@ class ProxyRequestHandler(BaseHTTPRequestHandler):
     def make_ownreq(self):
         req = self.request
         content_length = int(req.headers.get('Content-Length', 0))
-        req_body = self.rfile.read(content_length) if content_length else None
+        req_body = self.rfile.read(content_length) if content_length else ''
         if req.path[0] == '/':
             if isinstance(self.connection, ssl.SSLSocket):
                 req.path = "https://%s%s" % (req.headers['Host'], req.path)
@@ -444,8 +442,8 @@ class ProxyRequestHandler(BaseHTTPRequestHandler):
         self.reqlist.append(Request((len(self.reqlist) + 1), req.command, req.headers.get('Host'), req.path, req.request_version, req.headers, query_text, cookie, req_body_text))
 
         cookies = res.headers.get('Set-Cookie')
+        res_body_text = ''
         if res_body is not '':
-            res_body_text = ''
             content_type = res.headers.get('Content-Type', '')
             try:
                 if content_type.startswith('application/json'):
@@ -481,22 +479,22 @@ class ProxyRequestHandler(BaseHTTPRequestHandler):
         req_header_text = "%s %s %s\n%s" % (req.command, req.path, req.request_version, req.headers)
         res_header_text = "%s %d %s\n%s" % (res.response_version, res.status, res.reason, res.headers)
 
-        print(with_color(33, req_header_text))
+        print(yellow(req_header_text))
 
         u = urllib.parse.urlsplit(req.path)
         if u.query:
             query_text = parse_qsl(u.query)
-            print(with_color(32, "==== QUERY PARAMETERS ====\n%s\n" % query_text))
+            print(yellow( "==== QUERY PARAMETERS ====\n%s\n" % query_text))
 
         cookie = req.headers.get('Cookie', '')
         if cookie:
             cookie = parse_qsl((re.sub(r';\s*', '&', cookie)))
-            print(with_color(32, "==== COOKIE ====\n%s\n" % cookie))
+            print(yellow("==== COOKIE ====\n%s\n" % cookie))
 
         auth = req.headers.get('Authorization', '')
         if auth.lower().startswith('basic'):
             token = auth.split()[1].decode('base64')
-            print(with_color(31, "==== BASIC AUTH ====\n%s\n" % token))
+            print(red("==== BASIC AUTH ====\n%s\n" % token))
 
         if req_body is not None:
             req_body_text = None
@@ -518,14 +516,14 @@ class ProxyRequestHandler(BaseHTTPRequestHandler):
             elif len(req_body) < 1024:
                 req_body_text = req_body.decode()
             if req_body_text:
-                print(with_color(32, "==== REQUEST BODY ====\n%s\n" % req_body_text))
+                print(yellow("==== REQUEST BODY ====\n%s\n" % req_body_text))
 
-        print(with_color(36, res_header_text))
+        print(cyan(res_header_text))
 
         cookies = res.headers.get('Set-Cookie')
         if cookies:
             #cookies = '\n'.join(cookies)
-            print(with_color(31, "==== SET-COOKIE ====\n%s\n" % cookies))
+            print(red("==== SET-COOKIE ====\n%s\n" % cookies))
 
         if res_body is not None:
             res_body_text = None
@@ -546,12 +544,12 @@ class ProxyRequestHandler(BaseHTTPRequestHandler):
                 m = re.search(r'<title[^>]*>\s*([^<]+?)\s*</title>', res_body.decode(), re.I)
                 if m:
                     h = HTMLParser()
-                    print(with_color(32, "==== HTML TITLE ====\n%s\n" % h.unescape(m.group(1))))
+                    print(cyan("==== HTML TITLE ====\n%s\n" % h.unescape(m.group(1))))
             elif content_type.startswith('text/') and len(res_body) < 1024:
                 res_body_text = res_body.decode()
 
             if res_body_text: #Se tolgo questa condizione stampa tutto il codice html
-                print(with_color(32, "==== RESPONSE BODY ====\n%s\n" % res_body_text))
+                print(cyan("==== RESPONSE BODY ====\n%s\n" % res_body_text))
 
     def print_request(self, req, req_body):
         def parse_qsl(s):
@@ -559,22 +557,22 @@ class ProxyRequestHandler(BaseHTTPRequestHandler):
 
         req_header_text = "%s %s %s\n%s" % (req.command, req.path, req.request_version, req.headers)
 
-        print(with_color(33, req_header_text))
+        print(yellow(req_header_text))
 
         u = urllib.parse.urlsplit(req.path)
         if u.query:
             query_text = parse_qsl(u.query)
-            print(with_color(32, "==== QUERY PARAMETERS ====\n%s\n" % query_text))
+            print(yellow("==== QUERY PARAMETERS ====\n%s\n" % query_text))
 
         cookie = req.headers.get('Cookie', '')
         if cookie:
             cookie = parse_qsl((re.sub(r';\s*', '&', cookie)))
-            print(with_color(32, "==== COOKIE ====\n%s\n" % cookie))
+            print(yellow("==== COOKIE ====\n%s\n" % cookie))
 
         auth = req.headers.get('Authorization', '')
         if auth.lower().startswith('basic'):
             token = auth.split()[1].decode('base64')
-            print(with_color(31, "==== BASIC AUTH ====\n%s\n" % token))
+            print(yellow("==== BASIC AUTH ====\n%s\n" % token))
 
         if req_body is not None:
             req_body_text = None
@@ -596,17 +594,17 @@ class ProxyRequestHandler(BaseHTTPRequestHandler):
             elif len(req_body) < 1024:
                 req_body_text = req_body.decode()
             if req_body_text:
-                print(with_color(32, "==== REQUEST BODY ====\n%s\n" % req_body_text))
+                print(yellow("==== REQUEST BODY ====\n%s\n" % req_body_text))
 
 
     def print_response(self, res, res_body):
         res_header_text = "%s %d %s\n%s" % (res.response_version, res.status, res.reason, res.headers)
-        print(with_color(36, res_header_text))
+        print(cyan(res_header_text))
         cookies = res.headers.get('Set-Cookie')
         res_body_text = ' '
         if cookies:
             # cookies = '\n'.join(cookies)
-            print(with_color(31, "==== SET-COOKIE ====\n%s\n" % cookies))
+            print(cyan("==== SET-COOKIE ====\n%s\n" % cookies))
 
         if res_body is not None:
             content_type = res.headers.get('Content-Type', '')
@@ -625,7 +623,7 @@ class ProxyRequestHandler(BaseHTTPRequestHandler):
             elif content_type.startswith('text/'):
                 res_body_text = res_body.decode()
         if res_body_text != '':
-            print(with_color(32, res_body_text))
+            print(cyan(res_body_text))
 
     def request_handler(self, req, req_body):
         #req.command = "POST"

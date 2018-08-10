@@ -4,6 +4,7 @@ import threading
 import editor
 from http.server import BaseHTTPRequestHandler
 from io import BytesIO
+from inspect import signature
 from colors import red,green,blue,cyan,yellow
 
 p = proxy.Proxy()
@@ -50,12 +51,14 @@ def exitprogram():
 
 
 def help():
-    print("\nList of command: ")
-    for key in mydict:
-        print("-" + key)
-    for key in mydict2:
-        print('-' + key)
-
+    print("""Global commands:
+    help                                Print this help menu
+    exit                                Exit Purp
+    p					Print the last 10 info
+    p <option value>			Print the last value info
+    i <option value>			Print the value request and response
+    m <option value>			Modify the value request and show the response	
+	""")
 
 def ls():
     reqlist = p.get_req()
@@ -136,6 +139,8 @@ mydict = {
     "exit": exitprogram,
     "help": help,
     'p': printa,
+    'i': printsingle,
+    'm': modify
 }
 
 mydict2 = {
@@ -153,19 +158,23 @@ class Interpreter(object):
         found = False
         for key in mydict:
             command = self.text.split(' ')
-            if key == self.text:
-                if len(command) == 1:
-                    mydict[self.text]()
+            if key == command[0]:
+                sig = signature(mydict[command[0]])
+                params = sig.parameters
+                if command[0] == key:
+                    if(command[0] == 'p'):
+                        if len(command) == 1:
+                            mydict[command[0]]()
+                        else:
+                            mydict[command[0]](command[1])
+                    if len(params) == len(command) -1:
+                        if len(params) == 0:
+                            mydict[command[0]]()
+                        else:
+                            mydict[command[0]](command[1])
                     found = True
                 else:
-                    print('too many argument')
-        for key2 in mydict2:
-            if command[0] == key2:
-                if len(command) == 2:
-                    mydict2[command[0]](command[1])
-                    found = True
-                elif(command[0] != 'p'):
-                        print('Too many argument')
+                    print('Error')
         if not found:
             print("Command not found, use help for a list of command")
 
@@ -175,13 +184,26 @@ def sproxy():
 
 
 def inte():
+    print("""
+                                              
+ $$$$$$\  $$\   $$\  $$$$$$\   $$$$$$\        
+$$  __$$\ $$ |  $$ |$$  __$$\ $$  __$$\       
+$$ /  $$ |$$ |  $$ |$$ |  \__|$$ /  $$ |      
+$$ |  $$ |$$ |  $$ |$$ |      $$ |  $$ |      
+$$$$$$$  |\$$$$$$  |$$ |      $$$$$$$  |      
+$$  ____/  \______/ \__|      $$  ____/       
+$$ |                          $$ |            
+$$ |                          $$ |            
+\__|                          \__|            
+
+""")
     while True:
         try:
             text = ""
             completer = Mycompleter(mydict)
             readline.set_completer(completer.complete)
             readline.parse_and_bind("tab: complete")
-            text = input('Interpreter > ')
+            text = input('purp >>> ')
         except KeyboardInterrupt:
             pass
         except EOFError:
