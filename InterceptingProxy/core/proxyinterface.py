@@ -26,11 +26,14 @@ class Proxy(object):
 
     def modify(self, request1):
         self.HandlerClass.request = request1
-        global is_modified
-        is_modified = True
         self.HandlerClass.do_GET(self.HandlerClass, True)
 
         #self.HandlerClass.request_handler(self, req, req_body)
+
+    def ownmodify(self, request_line, headers):
+        req_body, conn = self.HandlerClass.make_ownreq(self, request_line, headers)
+        res, res_body, res_body_plain = self.HandlerClass.make_ownres(conn)
+        self.print_response(self, res, res_body_plain)
 
     def close(self):
         self.httpd.shutdown()

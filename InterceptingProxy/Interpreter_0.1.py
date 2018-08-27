@@ -6,6 +6,9 @@ from io import BytesIO
 from inspect import signature
 from colors import red,green,blue,cyan,yellow
 from core.proxyinterface import Proxy
+import email
+import io
+import pprint
 p = Proxy()
 
 
@@ -33,6 +36,12 @@ class HTTPRequest(BaseHTTPRequestHandler):
         self.raw_requestline = self.rfile.readline()
         self.error_code = self.error_message = None
         self.parse_request()
+
+    def log_message(self, format, *args):
+        return
+
+    def log_request(self, code='-', size='-'):
+        return
 
 
     def send_error(self, code, message):
@@ -88,6 +97,13 @@ def sniffing():
     p.start_sniffing()
 
 
+def parse_http(reqtxt):
+    request_line, headers_alone = reqtxt.split('\r\n', 1)
+    message = email.message_from_string(headers_alone)
+    headers = dict(message.items())
+    return request_line, headers
+
+
 def modify(number):
     number = int(number)
     reqlist = p.get_req()
@@ -95,8 +111,11 @@ def modify(number):
         print('Wrong ID number')
     else:
         strreq = editor.edit(contents= reqlist[number - 1].__str__().encode())
-        request = HTTPRequest(strreq)
-        p.modify(request)
+        request_line, headers = parse_http(strreq.decode())
+
+        #request = HTTPRequest(strreq)
+        #p.modify(request)
+        p.ownmodify(request_line, headers)
 
 def requestpost(number):
     number = int(number)
@@ -216,6 +235,7 @@ def main():
     try:
         t = threading.Thread(target=sproxy)
         t2 = threading.Thread(target=inte)
+        t2.daemon = True
         t.start()
         t2.start()
     except KeyboardInterrupt:
