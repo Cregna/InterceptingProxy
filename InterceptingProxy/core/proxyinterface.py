@@ -15,6 +15,9 @@ class Proxy(object):
         self.httpd = self.ServerClass(server_address, self.HandlerClass)
         self.httpd.serve_forever()
 
+    def q(self):
+        return self.HandlerClass.q
+
     def start_intercept(self):
         self.HandlerClass.mode = 'Intercepting'
 
@@ -31,9 +34,9 @@ class Proxy(object):
         #self.HandlerClass.request_handler(self, req, req_body)
 
     def ownmodify(self, request_line, headers):
-        req_body, conn = self.HandlerClass.make_ownreq(self, request_line, headers)
-        res, res_body, res_body_plain = self.HandlerClass.make_ownres(conn)
-        self.print_response(self, res, res_body_plain)
+        req_body, conn = self.HandlerClass.make_ownreq(self.HandlerClass, request_line, headers)
+        res, res_body, res_body_plain = self.HandlerClass.make_ownres(self.HandlerClass, conn)
+        self.HandlerClass.print_response(self, res, res_body_plain)
 
     def close(self):
         self.httpd.shutdown()
@@ -43,4 +46,6 @@ class Proxy(object):
 
     def get_res(self):
         return self.HandlerClass.reslist
+
+
 

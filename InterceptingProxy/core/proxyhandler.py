@@ -23,6 +23,7 @@ from colors import red,green,cyan,yellow
 from core.request import Request
 from core.response import Response
 import tempfile
+import email
 
 def join_with_script_dir(path):
     return os.path.join(os.path.dirname(os.path.abspath(__file__)), path)
@@ -52,6 +53,33 @@ class ProxyRequestHandler(BaseHTTPRequestHandler):
     reslist = []
     srequest = None
     mode = 'Sniffing'
+    paused = False
+    q = False
+    # Explicitly using Lock over RLock since the use of self.paused
+    # break reentrancy anyway, and I believe using Lock could allow
+    # one thread to pause the worker, while another resumes; haven't
+    # checked if Condition imposes additional limitations that would
+    # prevent that. In Python 2, use of Lock instead of RLock also
+    # boosts performance.
+    pause_cond = threading.Condition(threading.Lock())
+
+    def pause(self):
+        self.paused = True
+        # If in sleep, we acquire immediately, otherwise we wait for thread
+        # to release condition. In race, worker will still see self.paused
+        # and begin waiting until it's set back to False
+        self.pause_cond.acquire()
+
+
+
+        # should just resume the thread
+
+    def resume(self):
+        self.paused = False
+        # Notify so thread will wake after lock released
+        self.pause_cond.notify()
+        # Now release the lock
+        self.pause_cond.release()
 
     def log_message(self, format, *args):
         return
@@ -95,10 +123,12 @@ class ProxyRequestHandler(BaseHTTPRequestHandler):
         self.send_response(200, 'Connection Established')
         self.end_headers()
         #self.wfile.flush() #need it?
-
-        self.connection = ssl.wrap_socket(self.connection, keyfile=self.certkey, certfile=certpath, server_side=True, ssl_version=ssl.PROTOCOL_TLSv1_1)
-        self.rfile = self.connection.makefile("rb", self.rbufsize)
-        self.wfile = self.connection.makefile("wb", self.wbufsize)
+        try:
+            self.connection = ssl.wrap_socket(self.connection, keyfile=self.certkey, certfile=certpath, server_side=True, ssl_version=ssl.PROTOCOL_TLSv1_1)
+            self.rfile = self.connection.makefile("rb", self.rbufsize)
+            self.wfile = self.connection.makefile("wb", self.wbufsize)
+        except Exception:
+            pass
 
         conntype = self.headers.get('Proxy-Connection', '')
         if self.protocol_version == "HTTP/1.1" and conntype.lower() != 'close':
@@ -178,26 +208,47 @@ class ProxyRequestHandler(BaseHTTPRequestHandler):
         req.command = var[0]
         req.path = var[1]
         req.request_version = var[2]
+        u = urllib.parse.urlsplit(req.path)
+        scheme, netloc, path = u.scheme, u.netloc, (u.path + '?' + u.query if u.query else u.path)
         assert scheme in ('http', 'https')
-        setattr(req, 'headers', self.filter_headers(req.headers))
         try:
             origin = (scheme, netloc)
-            if not origin in self.tls.conns:
-                if scheme == 'https':
-                    self.tls.conns[origin] = http.client.HTTPSConnection(netloc, timeout=self.timeout)
-                else:
-                    self.tls.conns[origin] = http.client.HTTPConnection(netloc, timeout=self.timeout)
-            conn = self.tls.conns[origin]
-            if origin in self.tls.conns:
-                del self.tls.conns[origin]
-            self.send_error(502)
-            conn.request(self.command, path, req_body, dict(headers))
+            if scheme == 'https':
+                conns = http.client.HTTPSConnection(netloc, timeout=self.timeout)
+            else:
+                conns = http.client.HTTPConnection(netloc, timeout=self.timeout)
+            conn = conns
+            conn.request(self.command, req.path, req_body, dict(headers))
         except Exception as e:
-            if origin in self.tls.conns:
-                del self.tls.conns[origin]
+            if origin in conns:
+                del conns
             self.send_error(502)
         return req_body, conn
 
+
+        # def make_ownreq(self):
+        # req = self.request
+        # content_length = int(req.headers.get('Content-Length', 0))
+        # req_body = req.rfile.read(content_length) if content_length else ''
+        # if req.path[0] == '/':
+        #     if isinstance(self.connection, ssl.SSLSocket):
+        #         req.path = "https://%s%s" % (req.headers['Host'], req.path)
+        #     else:
+        #         req.path = "http://%s%s" % (req.headers['Host'], req.path)
+        # u = urllib.parse.urlsplit(req.path)
+        # scheme, netloc, path = u.scheme, u.netloc, (u.path + '?' + u.query if u.query else u.path)
+        # assert scheme in ('http', 'https')
+        # if netloc:
+        #     req.headers['Host'] = netloc
+        # setattr(req, 'headers', self.filter_headers(self, req.headers))
+        # origin = (scheme, netloc)
+        # if scheme == 'https':
+        #     conns = http.client.HTTPSConnection(netloc, timeout=self.timeout)
+        # else:
+        #     conns = http.client.HTTPConnection(netloc, timeout=self.timeout)
+        # conn = conns
+        # conn.request(req.command, path, req_body, dict(req.headers))
+        #  return req_body, conn
 
     def make_res(self, conn):
         res = conn.getresponse()
@@ -232,7 +283,7 @@ class ProxyRequestHandler(BaseHTTPRequestHandler):
             pass
         return res, res_body, res_body_plain
 
-    def make_ownres(self, conn):
+    def make_ownres(self, conn, normalmode = True):
         res = conn.getresponse()
 
         version_table = {10: 'HTTP/1.0', 11: 'HTTP/1.1'}
@@ -249,25 +300,28 @@ class ProxyRequestHandler(BaseHTTPRequestHandler):
 
         res_body = res.read()
         content_encoding = res.headers.get('Content-Encoding', 'identity')
-        res_body_plain = self.decode_content_body(res_body, content_encoding)
-
-        setattr(res, 'headers', self.filter_headers(res.headers))
-        self.send_response(res.status, res.reason)
-        for line in res.headers.items():
-            self.send_header(line[0], line[1])
-        self.end_headers()
-        try:
-            if (res_body != b''):
-                self.wfile.write(res_body)
-            self.wfile.flush()
-        except BrokenPipeError:
-            pass
+        res_body_plain = self.decode_content_body(self, res_body, content_encoding)
+        if(normalmode is False):
+            self.send_response(res.status, res.reason)
+            for line in res.headers.items():
+                self.send_header(line[0], line[1])
+            self.end_headers()
+            try:
+                if (res_body != b''):
+                    self.wfile.write(res_body)
+                self.wfile.flush()
+            except BrokenPipeError:
+                 pass
         return res, res_body, res_body_plain
 
     def modify(self,req,req_body):
-        str = "{} {} {}\r\n{}\n\r{}\r\n".format(req.command, req.path, req.request_version, req.headers, req_body.decode())
+        str = "{} {} {}\r\n{}\n\r{}\r\n".format(req.command, req.path, req.request_version, req.headers, req_body)
         strreq = editor.edit(contents=str.encode())
-        print(strreq.decode())
+        request_line, headers_alone = strreq.decode().split('\r\n', 1)
+        message = email.message_from_string(headers_alone)
+        headers = dict(message.items())
+        return request_line, headers
+
 
 
     def do_GET(self, is_modified=False):
@@ -284,12 +338,18 @@ class ProxyRequestHandler(BaseHTTPRequestHandler):
                     req, req_body, conn, path, req.headers = self.prepare_req()
                     self.print_request(req, req_body)
                     text = input('n for go on, r to modify the request ')
+                    if text == 'r':
+                        request_line, headers = self.modify(req, req_body)
+                        req_body, conn = self.make_ownreq(request_line, headers)
+                        res, res_body, res_body_plain = self.make_res(conn)
+                        self.print_response(res, res_body_plain)
                     if text == 'n':
                         req, req_body, conn = self.make_req()
                         res, res_body, res_body_plain = self.make_res(conn)
                         self.print_response(res, res_body_plain)
-                    if text == 'r':
-                        self.modify(req,req_body)
+                    if text == 'q':
+                        self.mode = 'Sniffing'
+
 
         if is_modified:
             req_body, conn = self.make_ownreq(self)
@@ -318,12 +378,12 @@ class ProxyRequestHandler(BaseHTTPRequestHandler):
     do_DELETE = do_GET
     do_OPTIONS = do_GET
 
-    def filter_headers(self, headers):
+    def filter_headers(self, header):
         # http://tools.ietf.org/html/rfc2616#section-13.5.1
         hop_by_hop = ('connection', 'keep-alive', 'proxy-authenticate', 'proxy-authorization', 'te', 'trailers', 'transfer-encoding', 'upgrade')
         for k in hop_by_hop:
-            del headers[k]
-        return headers
+            del header[k]
+        return header
 
     def encode_content_body(self, text, encoding):
         if encoding == 'identity':
