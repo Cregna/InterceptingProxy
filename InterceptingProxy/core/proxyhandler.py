@@ -20,9 +20,10 @@ from io import BytesIO
 from subprocess import Popen, PIPE
 from html.parser import HTMLParser
 from colors import red,green,cyan,yellow
-from core.request import Request
-from core.response import Response
+from InterceptingProxy.core.request import Request
+from InterceptingProxy.core.response import Response
 import tempfile
+import signal
 import email
 
 def join_with_script_dir(path):
@@ -348,7 +349,7 @@ class ProxyRequestHandler(BaseHTTPRequestHandler):
                         res, res_body, res_body_plain = self.make_res(conn)
                         self.print_response(res, res_body_plain)
                     if text == 'q':
-                        self.mode = 'Sniffing'
+                        os.kill(os.getpid(), signal.SIGTERM)
 
 
         if is_modified:

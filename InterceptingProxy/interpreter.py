@@ -5,32 +5,13 @@ from http.server import BaseHTTPRequestHandler
 from io import BytesIO
 from inspect import signature
 from colors import red,green,blue,cyan,yellow
-from core.proxyinterface import Proxy
+from InterceptingProxy.core.proxyinterface import Proxy
 import email
 import io
 import pprint
 p = Proxy()
 
-class INT(threading.Thread):
-    def __init__(self):
-        threading.Thread.__init__(self)
-        #flag to pause thread
-        self.paused = False
-        # Explicitly using Lock over RLock since the use of self.paused
-        # break reentrancy anyway, and I believe using Lock could allow
-        # one thread to pause the worker, while another resumes; haven't
-        # checked if Condition imposes additional limitations that would
-        # prevent that. In Python 2, use of Lock instead of RLock also
-        # boosts performance.
-        self.pause_cond = threading.Condition(threading.Lock())
-
-    def run(self):
-        while True:
-            with self.pause_cond:
-                while self.paused:
-                    self.pause_cond.wait()
-
-                print("""
+banner = """
 
                  $$$$$$\  $$\   $$\  $$$$$$\   $$$$$$\        
                 $$  __$$\ $$ |  $$ |$$  __$$\ $$  __$$\       
@@ -42,40 +23,7 @@ class INT(threading.Thread):
                 $$ |                          $$ |            
                 \__|                          \__|            
 
-                """)
-                while True:
-                    try:
-                        text = ""
-                        completer = Mycompleter(mydict)
-                        readline.set_completer(completer.complete)
-                        readline.parse_and_bind("tab: complete")
-                        text = input('>>> ')
-                    except KeyboardInterrupt:
-                        pass
-                    except EOFError:
-                        break
-                    if not text:
-                        continue
-                    interpreter = Interpreter(text)
-                    interpreter.didfunc()
-
-    def pause(self):
-        self.paused = True
-        # If in sleep, we acquire immediately, otherwise we wait for thread
-        # to release condition. In race, worker will still see self.paused
-        # and begin waiting until it's set back to False
-        self.pause_cond.acquire()
-
-    #should just resume the thread
-    def resume(self):
-        self.paused = False
-        # Notify so thread will wake after lock released
-        self.pause_cond.notify()
-        # Now release the lock
-        self.pause_cond.release()
-
-inter = INT()
-
+                """
 
 class Mycompleter(object):
     def __init__(self, options):
@@ -92,27 +40,6 @@ class Mycompleter(object):
             return self.matches[state]
         except IndexError:
             return None
-
-class HTTPRequest(BaseHTTPRequestHandler):
-    lock = threading.Lock()
-
-    def __init__(self, request_text):
-        self.rfile = BytesIO(request_text)
-        self.raw_requestline = self.rfile.readline()
-        self.error_code = self.error_message = None
-        self.parse_request()
-
-    def log_message(self, format, *args):
-        return
-
-    def log_request(self, code='-', size='-'):
-        return
-
-
-    def send_error(self, code, message):
-        self.error_code = code
-        self.error_message = message
-
 
 def exitprogram():
     print("Sto uscendo..\n")
@@ -155,16 +82,7 @@ def printres():
 
 
 def intercept():
-    try:
-        p.start_intercept()
-        inter.pause()
-    except Exception:
-        inter.resume()
-
-
-
-def sniffing():
-    p.start_sniffing()
+    p.start_intercept()
 
 
 def parse_http(reqtxt):
@@ -182,9 +100,6 @@ def modify(number):
     else:
         strreq = editor.edit(contents= reqlist[number - 1].__str__().encode())
         request_line, headers = parse_http(strreq.decode())
-
-        #request = HTTPRequest(strreq)
-        #p.modify(request)
         p.ownmodify(request_line, headers)
 
 def requestpost(number):
@@ -225,9 +140,7 @@ mydict = {
     "help": help,
     'p': printa,
     'i': printsingle,
-    'm': modify,
-    'sniffing': sniffing,
-    'intercept': intercept
+    'm': modify
 }
 
 mydict2 = {
@@ -271,19 +184,8 @@ def sproxy():
 
 
 def inte():
-    print("""
-                                              
- $$$$$$\  $$\   $$\  $$$$$$\   $$$$$$\        
-$$  __$$\ $$ |  $$ |$$  __$$\ $$  __$$\       
-$$ /  $$ |$$ |  $$ |$$ |  \__|$$ /  $$ |      
-$$ |  $$ |$$ |  $$ |$$ |      $$ |  $$ |      
-$$$$$$$  |\$$$$$$  |$$ |      $$$$$$$  |      
-$$  ____/  \______/ \__|      $$  ____/       
-$$ |                          $$ |            
-$$ |                          $$ |            
-\__|                          \__|            
-
-""")
+    print(banner)
+    print('\n***Sniffing mode***\n')
     while True:
         try:
             text = ""
@@ -301,17 +203,22 @@ $$ |                          $$ |
         interpreter.didfunc()
 
 
-def main():
-    try:
-        t = threading.Thread(target=sproxy)
-        #t2 = threading.Thread(target=inte)
-        #t2.daemon = True
-        t.start()
-        inter.start()
-    except KeyboardInterrupt:
-        exit()
+class Starting(object):
 
-
-if __name__ == '__main__':
-    main()
+    def start(mode = 'sniffing'):
+        if mode == 'sniffing':
+            try:
+                t = threading.Thread(target=sproxy)
+                t2 = threading.Thread(target=inte)
+                t.start()
+                t2.start()
+            except KeyboardInterrupt:
+                exit()
+        if mode == 'intercepting':
+            print(banner)
+            print('\n***Intercepting mode***\n')
+            print("Waiting for incoming request from browser...")
+            t = threading.Thread(target=sproxy)
+            t.start()
+            intercept()
 

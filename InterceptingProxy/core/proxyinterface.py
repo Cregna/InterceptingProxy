@@ -1,4 +1,4 @@
-from core.proxyhandler import ProxyRequestHandler, ThreadingHTTPServer
+from InterceptingProxy.core.proxyhandler import ProxyRequestHandler, ThreadingHTTPServer
 
 class Proxy(object):
     def __init__(self):
