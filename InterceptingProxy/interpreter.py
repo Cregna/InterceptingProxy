@@ -62,6 +62,13 @@ def ls():
     for x in reqlist:
         x.print_req()
 
+response_code_color = {
+    '1': blue,
+    '2': green,
+    '3': yellow,
+    '4': red,
+    '5': cyan
+}
 
 def lsr():
     reslist = p.get_res()
@@ -77,7 +84,8 @@ def printres():
     for x in range(len(reqlist)):
         lenhost = len(reqlist[x].host) + 8
         path = ((str(reqlist[x].path[lenhost: lenhost + 35]) + '...') if len(reqlist[x].path) - lenhost > 30 else reqlist[x].path[lenhost:])
-        print('{:<4}{:<10s}{:<30s}{:<40s}{:<30s}'.format(str(reqlist[x].id), str(reqlist[x].command), str(reqlist[x].host), path, str(reslist[x].status) + ' ' + str(reslist[x].reason)  ))
+        print('{:<4}{:<10s}{:<30s}{:<40s}'.format(str(reqlist[x].id), str(reqlist[x].command), str(reqlist[x].host), path))
+        print(response_code_color[str(reslist[x].status[1])]('{:<30s}'.format(str(reslist[x].status) + ' ' + str(reslist[x].reason))))
     print('\n')
 
 
@@ -119,9 +127,11 @@ def printa(val = '10'):
         if x > (len(reqlist)  - int(val) - 1):
             lenhost = len(reqlist[x].host) + 8
             path = ((str(reqlist[x].path[lenhost: lenhost + 35]) + '...') if len(reqlist[x].path) - lenhost > 30 else reqlist[x].path[lenhost:])
-            print('{:<4}{:<10s}{:<30s}{:<40s}{:<30s}'.format(str(reqlist[x].id), str(reqlist[x].command),
-                                                             str(reqlist[x].host), path,
-                                                             str(reslist[x].status) + ' ' + str(reslist[x].reason)))
+            print('{:<4}{:<10s}{:<30s}{:<40s}'.format(str(reqlist[x].id), str(reqlist[x].command),
+                                                             str(reqlist[x].host), path), end="")
+            print(response_code_color[str(reslist[x].status)[0]](
+                '{:<30s}'.format(str(reslist[x].status) + ' ' + str(reslist[x].reason))))
+
     print('\n')
 
 def printsingle(number):
