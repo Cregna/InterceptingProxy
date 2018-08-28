@@ -226,31 +226,6 @@ class ProxyRequestHandler(BaseHTTPRequestHandler):
             self.send_error(502)
         return req_body, conn
 
-
-        # def make_ownreq(self):
-        # req = self.request
-        # content_length = int(req.headers.get('Content-Length', 0))
-        # req_body = req.rfile.read(content_length) if content_length else ''
-        # if req.path[0] == '/':
-        #     if isinstance(self.connection, ssl.SSLSocket):
-        #         req.path = "https://%s%s" % (req.headers['Host'], req.path)
-        #     else:
-        #         req.path = "http://%s%s" % (req.headers['Host'], req.path)
-        # u = urllib.parse.urlsplit(req.path)
-        # scheme, netloc, path = u.scheme, u.netloc, (u.path + '?' + u.query if u.query else u.path)
-        # assert scheme in ('http', 'https')
-        # if netloc:
-        #     req.headers['Host'] = netloc
-        # setattr(req, 'headers', self.filter_headers(self, req.headers))
-        # origin = (scheme, netloc)
-        # if scheme == 'https':
-        #     conns = http.client.HTTPSConnection(netloc, timeout=self.timeout)
-        # else:
-        #     conns = http.client.HTTPConnection(netloc, timeout=self.timeout)
-        # conn = conns
-        # conn.request(req.command, path, req_body, dict(req.headers))
-        #  return req_body, conn
-
     def make_res(self, conn):
         res = conn.getresponse()
 
@@ -335,21 +310,25 @@ class ProxyRequestHandler(BaseHTTPRequestHandler):
                     self.save_response(res, res_body_plain)
 
             if self.mode == 'Intercepting':
+                text = ''
                 with self.lock:
                     req, req_body, conn, path, req.headers = self.prepare_req()
                     self.print_request(req, req_body)
-                    text = input('n for go on, r to modify the request ')
+                    while (text != 'n' and text != 'r' and text != 'q'):
+                        text = input('n for go on, r to modify the request ')
                     if text == 'r':
                         request_line, headers = self.modify(req, req_body)
                         req_body, conn = self.make_ownreq(request_line, headers)
                         res, res_body, res_body_plain = self.make_res(conn)
                         self.print_response(res, res_body_plain)
-                    if text == 'n':
+                    elif text == 'n':
                         req, req_body, conn = self.make_req()
                         res, res_body, res_body_plain = self.make_res(conn)
                         self.print_response(res, res_body_plain)
-                    if text == 'q':
+                    elif text == 'q':
                         os.kill(os.getpid(), signal.SIGTERM)
+
+
 
 
         if is_modified:

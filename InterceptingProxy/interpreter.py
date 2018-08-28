@@ -162,12 +162,12 @@ class Interpreter(object):
                 sig = signature(mydict[command[0]])
                 params = sig.parameters
                 if command[0] == key:
-                    if(command[0] == 'p'):
+                    if (command[0] == 'p'):
                         if len(command) == 1:
                             mydict[command[0]]()
                         else:
                             mydict[command[0]](command[1])
-                    if len(params) == len(command) -1:
+                    elif len(params) == len(command) -1:
                         if len(params) == 0:
                             mydict[command[0]]()
                         else:
