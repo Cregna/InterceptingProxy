@@ -329,8 +329,6 @@ class ProxyRequestHandler(BaseHTTPRequestHandler):
                         os.kill(os.getpid(), signal.SIGTERM)
 
 
-
-
         if is_modified:
             req_body, conn = self.make_ownreq(self)
             res, res_body, res_body_plain = self.make_ownres(self, conn)
