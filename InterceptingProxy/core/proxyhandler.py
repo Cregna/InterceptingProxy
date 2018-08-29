@@ -22,6 +22,7 @@ from colors import red,green,cyan,yellow
 from InterceptingProxy.core.request import Request
 from InterceptingProxy.core.response import Response
 import signal
+import getpass
 import email
 from InterceptingProxy.core.database import Database
 
@@ -45,13 +46,13 @@ class ThreadingHTTPServer(ThreadingMixIn, HTTPServer):
 
 
 class ProxyRequestHandler(BaseHTTPRequestHandler):
+    username = getpass.getuser()
+    mainpath= '/home/' + username + '/.purp/'
 
-
-
-    cakey = join_with_script_dir('ca.key')
-    cacert = join_with_script_dir('ca.crt')
-    certkey = join_with_script_dir('cert.key')
-    certdir = join_with_script_dir('certs/')
+    cakey = mainpath + 'ca.key'
+    cacert = mainpath + 'ca.crt'
+    certkey = mainpath + 'cert.key'
+    certdir = mainpath + 'certs/'
     timeout = 5
     lock = threading.Lock()
     reqlist = []
