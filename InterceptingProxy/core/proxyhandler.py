@@ -18,13 +18,14 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 from socketserver import ThreadingMixIn
 from io import BytesIO
 from subprocess import Popen, PIPE
-from html.parser import HTMLParser
 from colors import red,green,cyan,yellow
 from InterceptingProxy.core.request import Request
 from InterceptingProxy.core.response import Response
-import tempfile
 import signal
 import email
+from InterceptingProxy.core.database import Database
+
+database = Database()
 
 def join_with_script_dir(path):
     return os.path.join(os.path.dirname(os.path.abspath(__file__)), path)
@@ -44,6 +45,9 @@ class ThreadingHTTPServer(ThreadingMixIn, HTTPServer):
 
 
 class ProxyRequestHandler(BaseHTTPRequestHandler):
+
+
+
     cakey = join_with_script_dir('ca.key')
     cacert = join_with_script_dir('ca.crt')
     certkey = join_with_script_dir('cert.key')
@@ -55,6 +59,7 @@ class ProxyRequestHandler(BaseHTTPRequestHandler):
     srequest = None
     mode = 'Sniffing'
     paused = False
+
     q = False
     # Explicitly using Lock over RLock since the use of self.paused
     # break reentrancy anyway, and I believe using Lock could allow
@@ -165,7 +170,10 @@ class ProxyRequestHandler(BaseHTTPRequestHandler):
     def prepare_req(self):
         req = self
         content_length = int(req.headers.get('Content-Length', 0))
-        req_body = self.rfile.read(content_length) if content_length else ''
+        try:
+            req_body = self.rfile.read(content_length) if content_length else ''
+        except socket.timeout:
+            req_body = ''
         if req.path[0] == '/':
             if isinstance(self.connection, ssl.SSLSocket):
                 req.path = "https://%s%s" % (req.headers['Host'], req.path)
@@ -187,13 +195,12 @@ class ProxyRequestHandler(BaseHTTPRequestHandler):
             if origin in self.tls.conns:
                 del self.tls.conns[origin]
             self.send_error(502)
-        return req, req_body, conn, path, req.headers
+        return req, req_body, conn, path, req.headers, origin
 
-    def make_req(self,issniffing=True):
+    def make_req(self):
         try:
-            req, req_body, conn, path, headers = self.prepare_req()
-            if issniffing:
-                conn.request(self.command, path, req_body, dict(headers))
+            req, req_body, conn, path, headers, origin = self.prepare_req()
+            conn.request(self.command, path, req_body, dict(headers))
         except Exception as e:
             if origin in self.tls.conns:
                 del self.tls.conns[origin]
@@ -259,7 +266,7 @@ class ProxyRequestHandler(BaseHTTPRequestHandler):
             pass
         return res, res_body, res_body_plain
 
-    def make_ownres(self, conn, normalmode = True):
+    def make_ownres(self, conn):
         res = conn.getresponse()
 
         version_table = {10: 'HTTP/1.0', 11: 'HTTP/1.1'}
@@ -277,17 +284,6 @@ class ProxyRequestHandler(BaseHTTPRequestHandler):
         res_body = res.read()
         content_encoding = res.headers.get('Content-Encoding', 'identity')
         res_body_plain = self.decode_content_body(self, res_body, content_encoding)
-        if(normalmode is False):
-            self.send_response(res.status, res.reason)
-            for line in res.headers.items():
-                self.send_header(line[0], line[1])
-            self.end_headers()
-            try:
-                if (res_body != b''):
-                    self.wfile.write(res_body)
-                self.wfile.flush()
-            except BrokenPipeError:
-                 pass
         return res, res_body, res_body_plain
 
     def modify(self,req,req_body):
@@ -299,40 +295,34 @@ class ProxyRequestHandler(BaseHTTPRequestHandler):
         return request_line, headers
 
 
+    def do_GET(self):
+        if self.mode == 'Sniffing':
+            req, req_body, conn = self.make_req()
+            res, res_body, res_body_plain = self.make_res(conn)
+            with self.lock:
+                self.save_req(req, req_body)
+                self.save_response(res, res_body_plain)
 
-    def do_GET(self, is_modified=False):
-        if not is_modified:
-            if self.mode == 'Sniffing':
-                req, req_body, conn = self.make_req()
-                res, res_body, res_body_plain = self.make_res(conn)
-                with self.lock:
-                    self.save_req(req, req_body)
-                    self.save_response(res, res_body_plain)
+        if self.mode == 'Intercepting':
+            text = ''
+            with self.lock:
+                req, req_body, conn, path, req.headers, origin = self.prepare_req()
+                self.print_request(req, req_body)
+                while (text != 'n' and text != 'r' and text != 'q'):
+                    text = input('n for go on, r to modify the request ')
+                if text == 'r':
+                    request_line, headers = self.modify(req, req_body)
+                    req_body, conn = self.make_ownreq(request_line, headers)
+                    res, res_body, res_body_plain = self.make_res(conn)
+                    self.print_response(res, res_body_plain)
+                elif text == 'n':
+                    req, req_body, conn = self.make_req()
+                    res, res_body, res_body_plain = self.make_res(conn)
+                    self.print_response(res, res_body_plain)
+                    print('\n---------------------------------------\n')
+                elif text == 'q':
+                    os.kill(os.getpid(), signal.SIGTERM)
 
-            if self.mode == 'Intercepting':
-                text = ''
-                with self.lock:
-                    req, req_body, conn, path, req.headers = self.prepare_req()
-                    self.print_request(req, req_body)
-                    while (text != 'n' and text != 'r' and text != 'q'):
-                        text = input('n for go on, r to modify the request ')
-                    if text == 'r':
-                        request_line, headers = self.modify(req, req_body)
-                        req_body, conn = self.make_ownreq(request_line, headers)
-                        res, res_body, res_body_plain = self.make_res(conn)
-                        self.print_response(res, res_body_plain)
-                    elif text == 'n':
-                        req, req_body, conn = self.make_req()
-                        res, res_body, res_body_plain = self.make_res(conn)
-                        self.print_response(res, res_body_plain)
-                    elif text == 'q':
-                        os.kill(os.getpid(), signal.SIGTERM)
-
-
-        if is_modified:
-            req_body, conn = self.make_ownreq(self)
-            res, res_body, res_body_plain = self.make_ownres(self, conn)
-            self.print_response(self, res, res_body_plain)
 
     def relay_streaming(self, res):
         self.send_response(res.status, res.reason)
@@ -449,6 +439,13 @@ class ProxyRequestHandler(BaseHTTPRequestHandler):
 
         self.reqlist.append(Request((len(self.reqlist) + 1), req.command, req.headers.get('Host'), req.path, req.request_version, req.headers, query_text, cookie, req_body_text))
 
+        #------DB-----------
+
+        request = [str(req.command), str(req.headers.get('Host')), str(req.path), str(req.request_version), str(req.headers), str(req_body_text)]
+        database.insertrequest(request)
+
+
+
     def save_response(self, res, res_body):
         cookies = res.headers.get('Set-Cookie')
         res_body_text = ''
@@ -482,6 +479,11 @@ class ProxyRequestHandler(BaseHTTPRequestHandler):
         self.reslist.append(
             Response((len(self.reslist) + 1), res.response_version, res.status, res.reason, res.headers, cookies,
                      res_body_text))
+
+        response = [str(res.response_version), str(res.status), str(res.reason), str(res.headers), res_body_text]
+
+        database.insertresponse(response)
+        database.inserttrans()
 
     def print_request(self, req, req_body):
 

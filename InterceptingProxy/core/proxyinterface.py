@@ -10,13 +10,16 @@ class Proxy(object):
     def start(self):
         port = 8080
         server_address = ('localhost', port)
-
         self.HandlerClass.protocol_version = self.protocol
         self.httpd = self.ServerClass(server_address, self.HandlerClass)
         self.httpd.serve_forever()
 
     def q(self):
         return self.HandlerClass.q
+
+    def setpath(self, path, nopath):
+        self.HandlerClass.path = path
+        self.HandlerClass.createdb(nopath)
 
     def start_intercept(self):
         self.HandlerClass.mode = 'Intercepting'
@@ -26,12 +29,6 @@ class Proxy(object):
 
     def get_srequest(self):
         return self.HandlerClass
-
-    def modify(self, request1):
-        self.HandlerClass.request = request1
-        self.HandlerClass.do_GET(self.HandlerClass, True)
-
-        #self.HandlerClass.request_handler(self, req, req_body)
 
     def ownmodify(self, request_line, headers):
         req_body, conn = self.HandlerClass.make_ownreq(self.HandlerClass, request_line, headers)
