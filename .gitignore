@@ -1,6 +1,54 @@
+*.py[cod]
+__pycache__
+
+*.key
+certs
+ca.*
+
+# Virtual Environment
 env/
-InterceptingProxy/core/certs
-InterceptingProxy/core/ca.*
-InterceptingProxy/core/cert.key
-InterceptingProxy/core/__pycache__/
+venv/
+
+# C extensions
+*.so
+
+# Vim
+[._]*.s[a-w][a-z]
+[._]s[a-w][a-z]
+*.un~
+Session.vim
+
+# Packages
+*.egg
+*.egg-info
+dist
+build
+eggs
+parts
+var
+sdist
+develop-eggs
+.installed.cfg
+lib
+lib64
+
+# Installer logs
+pip-log.txt
+
+# Unit test / coverage reports
+.coverage
+.tox
+nosetests.xml
+
+# Mr Developer
+.mr.developer.cfg
+.project
+.pydevproject
+
+# GitHub token file
+.pypt/gh-token
+
+# 
+.DS_Store
+
 
