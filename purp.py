@@ -9,11 +9,14 @@ from InterceptingProxy.interpreter import Starting
 
 parser = argparse.ArgumentParser()
 parser.add_argument("-i", "--intercepting", help="Start Purp in intercepting mode",action="store_true")
+parser.add_argument('-d', '--database', help='select path for db', action='store')
 args = parser.parse_args()
 def purp():
     purp = Starting
     if args.intercepting:
         purp.start('intercepting')
+    if args.database is not None:
+        purp.start('sniffing', args.database)
     else:
         purp.start()
 1

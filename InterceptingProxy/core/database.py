@@ -35,15 +35,16 @@ class Database(object):
 	FOREIGN KEY(`id_response`) REFERENCES 'Response'('id') ON DELETE SET NULL
 )
     '''
-    username = getpass.getuser()
-    namefile = 'purp.sqlite'
-    default_path = '/home/'+username+'/.purp/purp.sqlite'
-
+    #username = getpass.getuser()
+    #namefile = 'purp.sqlite'
+    #default_path = '/home/'+username+'/.purp/purp.sqlite'
+    fullpath = ''
     exist = False
 
-    def __init__(self, path = '/home/'+username+'/.purp/'):
+    def setpath(self, path):
+        path, namefile = os.path.split(path)
         self.verifydir(path)
-        self.fullpath = path + self.namefile
+        self.fullpath = path +'/' +namefile
         self.exist =  os.path.isfile(self.fullpath)
 
 

@@ -9,6 +9,11 @@ from InterceptingProxy.core.proxyinterface import Proxy
 import email
 import io
 import pprint
+import getpass
+from InterceptingProxy.core.database import Database
+
+pat = ''
+
 p = Proxy()
 
 banner = """
@@ -188,6 +193,15 @@ class Interpreter(object):
         if not found:
             print("Command not found, use help for a list of command")
 
+def setpath():
+    global pat
+    if pat == 'default':
+        username = getpass.getuser()
+        namefile = 'purp.sqlite'
+        path = '/home/'+username+'/.purp/purp.sqlite'
+        p.setpath(path)
+    if pat != 'default':
+        p.setpath(pat)
 
 def sproxy():
     p.start()
@@ -215,12 +229,15 @@ def inte():
 
 class Starting(object):
 
-    def start(mode = 'sniffing'):
+    def start(mode = 'sniffing', path = 'default'):
+        global pat
+        pat = path
         if mode == 'sniffing':
             try:
                 t = threading.Thread(target=sproxy)
                 t2 = threading.Thread(target=inte)
                 t.start()
+                setpath()
                 t2.start()
             except KeyboardInterrupt:
                 exit()

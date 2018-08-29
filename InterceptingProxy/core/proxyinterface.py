@@ -17,9 +17,8 @@ class Proxy(object):
     def q(self):
         return self.HandlerClass.q
 
-    def setpath(self, path, nopath):
-        self.HandlerClass.path = path
-        self.HandlerClass.createdb(nopath)
+    def setpath(self, path):
+        self.HandlerClass.pathdb = path
 
     def start_intercept(self):
         self.HandlerClass.mode = 'Intercepting'
