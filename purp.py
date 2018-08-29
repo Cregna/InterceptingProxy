@@ -13,10 +13,11 @@ parser.add_argument('-d', '--database', help='select path for db', action='store
 args = parser.parse_args()
 def purp():
     purp = Starting
-    if args.intercepting:
-        purp.start('intercepting')
     if args.database is not None:
         purp.start('sniffing', args.database)
+    elif args.intercepting:
+        purp.start('intercepting')
+
     else:
         purp.start()
 1

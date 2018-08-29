@@ -242,6 +242,7 @@ class Starting(object):
             except KeyboardInterrupt:
                 exit()
         if mode == 'intercepting':
+            setpath()
             print(banner)
             print('\n***Intercepting mode***\n')
             print("Waiting for incoming request from browser...")
