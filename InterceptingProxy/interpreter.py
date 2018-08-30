@@ -1,14 +1,12 @@
 import readline
 import threading
 import editor
-from http.server import BaseHTTPRequestHandler
-from io import BytesIO
 from inspect import signature
 from colors import red,green,blue,cyan,yellow, bold, white, magenta
 from InterceptingProxy.core.proxyinterface import Proxy
 import email
-import io
-import pprint
+import subprocess
+import tempfile
 import getpass
 from InterceptingProxy.core.database import Database
 
@@ -174,8 +172,24 @@ def printsingle(number):
         print(yellow(reqlist[number - 1].__str__()))
         print(green(reslist[number -1].__str__()))
 
+def less(number):
+    number = int(number)
+    reqlist = p.get_req()
+    reslist = p.get_res()
+    transaction = reqlist[number - 1].__str__() + reslist[number -1].__str__()
+    if number > len(reqlist):
+        print('Wrong ID number')
+    else:
+        tmp = tempfile.NamedTemporaryFile()
+        filename = tmp.name
+        with open(filename, mode='wb') as f:
+            f.write(transaction.encode())
+        command = 'less ' + filename
+        subprocess.call(command, shell=True)
+
 
 mydict = {
+    'less': less,
     "exit": exitprogram,
     "h": help,
     "help": help,
@@ -193,7 +207,8 @@ mydict2 = {
     'print': printa,
     'p': printa,
     'modify': modify,
-    'm': modify
+    'm': modify,
+    'less': less
 }
 
 
