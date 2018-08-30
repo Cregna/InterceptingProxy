@@ -1,7 +1,6 @@
 #!/bin/sh
-username=$(whoami)
-mkdir -p /home/$username/.purp
-openssl genrsa -out /home/$username/.purp/ca.key 2048
-openssl req -new -x509 -days 3650 -key /home/$username/.purp/ca.key -out /home/$username/.purp/ca.crt -subj "/CN=proxy CA"
-openssl genrsa -out /home/$username/.purp/cert.key 2048
-mkdir -p /home/$username/.purp/certs
+mkdir -p "$HOME/.purp"
+openssl genrsa -out "$HOME/.purp/ca.key" 2048
+openssl req -new -x509 -days 3650 -key "$HOME/.purp/ca.key" -out "$HOME/.purp/ca.crt" -subj "/CN=proxy CA"
+openssl genrsa -out "$HOME/.purp/cert.key" 2048
+mkdir -p "$HOME/.purp/certs"

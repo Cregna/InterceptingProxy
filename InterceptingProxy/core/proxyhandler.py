@@ -22,15 +22,11 @@ from colors import red,green,cyan,yellow
 from InterceptingProxy.core.request import Request
 from InterceptingProxy.core.response import Response
 import signal
-import getpass
+from pathlib import Path
 import email
 from InterceptingProxy.core.database import Database
 
 database = Database()
-
-def join_with_script_dir(path):
-    return os.path.join(os.path.dirname(os.path.abspath(__file__)), path)
-
 
 class ThreadingHTTPServer(ThreadingMixIn, HTTPServer):
     address_family = socket.AF_INET
@@ -46,8 +42,8 @@ class ThreadingHTTPServer(ThreadingMixIn, HTTPServer):
 
 
 class ProxyRequestHandler(BaseHTTPRequestHandler):
-    username = getpass.getuser()
-    mainpath= '/home/' + username + '/.purp/'
+    mainpath= str(Path.home()) + '/.purp/'
+    print(mainpath)
 
     cakey = mainpath + 'ca.key'
     cacert = mainpath + 'ca.crt'
@@ -473,7 +469,7 @@ class ProxyRequestHandler(BaseHTTPRequestHandler):
             content_type = req.headers.get('Content-Type', '')
 
             if content_type.startswith('application/x-www-form-urlencoded'):
-                req_body_text = parse_qsl(req_body.decode('utf-8'))
+                req_body_text = req_body.decode('utf-8')
             elif content_type.startswith('application/json'):
                 try:
                     json_obj = json.loads(req_body.decode())
@@ -493,7 +489,8 @@ class ProxyRequestHandler(BaseHTTPRequestHandler):
 
     def print_response(self, res, res_body):
         res_header_text = "%s %d %s\n%s" % (res.response_version, res.status, res.reason, res.headers)
-        print(cyan(res_header_text))
+        print('\n----------------------------\n')
+        print(green(res_header_text))
         res_body_text = ' '
 
         if res_body is not None:
@@ -513,7 +510,7 @@ class ProxyRequestHandler(BaseHTTPRequestHandler):
             elif content_type.startswith('text/'):
                 res_body_text = res_body.decode()
         if res_body_text != '':
-            print(cyan(res_body_text))
+            print(green(res_body_text))
 
 
 
