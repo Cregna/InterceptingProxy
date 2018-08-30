@@ -4,7 +4,7 @@ import editor
 from http.server import BaseHTTPRequestHandler
 from io import BytesIO
 from inspect import signature
-from colors import red,green,blue,cyan,yellow
+from colors import red,green,blue,cyan,yellow, bold, white, magenta
 from InterceptingProxy.core.proxyinterface import Proxy
 import email
 import io
@@ -17,16 +17,27 @@ pat = ''
 p = Proxy()
 
 banner = """
-
-                 $$$$$$\  $$\   $$\  $$$$$$\   $$$$$$\        
-                $$  __$$\ $$ |  $$ |$$  __$$\ $$  __$$\       
-                $$ /  $$ |$$ |  $$ |$$ |  \__|$$ /  $$ |      
-                $$ |  $$ |$$ |  $$ |$$ |      $$ |  $$ |      
-                $$$$$$$  |\$$$$$$  |$$ |      $$$$$$$  |      
-                $$  ____/  \______/ \__|      $$  ____/       
-                $$ |                          $$ |            
-                $$ |                          $$ |            
-                \__|                          \__|            
+ ______________
+< I'm a purp!!! >
+ --------------
+        \               ___
+         \           .-'   `'.
+                    /         \\
+                    |         ;
+                    |         |           ___.--,
+           _.._     |0) ~ (0) |    _.---'`__.-( (_.
+    __.--'`_.. '.__.\    '--. \_.-' ,.--'`     `""`
+   ( ,.--'`   ',__ /./;   ;, '.__.'`    __
+   _`) )  .---.__.' / |   |\   \__..--""  ""--.,_
+  `---' .'.''-._.-'`_./  /\ '.  \ _.-~~~````~~~-._`-.__.'
+        | |  .' _.-' |  |  \  \  '.               `~---`
+         \ \/ .'     \  \   '. '-._)
+          \/ /        \  \    `=.__`~-.
+          / /\         `) )    / / `"". \\
+    , _.-'.'\ \        / /    ( (     / /
+     `--~`   ) )    .-'.'      '.'.  | (
+            (/`    ( (`          ) )  '-;
+             `      '-;         (-'
 
                 """
 
@@ -73,6 +84,19 @@ response_code_color = {
     '3': yellow,
     '4': red,
     '5': cyan
+}
+
+method_color ={
+    "GET": cyan,
+    "POST": yellow,
+    "HEAD": green,
+    "PUT": blue,
+    "DELETE": red,
+    "CONNECT": yellow,
+    "OPTIONS": cyan,
+    "TRACE": magenta,
+    "CONNECT": white
+
 }
 
 def lsr():
@@ -127,15 +151,16 @@ def printa(val = '10'):
     reqlist = p.get_req()
     reslist = p.get_res()
     titles = ['ID', 'Method', 'Host', 'path', 'R-Code']
-    print('{:<4s}{:<10s}{:<30s}{:<40s}{:<30s}'.format(titles[0], titles[1], titles[2], titles[3], titles[4]))
+    print(bold('{:<6s}{:<10s}{:<40s}{:<40s}{:<20s}'.format(titles[0], titles[1], titles[2], titles[3], titles[4])))
     for x in range(len(reqlist)):
         if x > (len(reqlist)  - int(val) - 1):
             lenhost = len(reqlist[x].host) + 8
             path = ((str(reqlist[x].path[lenhost: lenhost + 35]) + '...') if len(reqlist[x].path) - lenhost > 30 else reqlist[x].path[lenhost:])
-            print('{:<4}{:<10s}{:<30s}{:<40s}'.format(str(reqlist[x].id), str(reqlist[x].command),
-                                                             str(reqlist[x].host), path), end="")
+            print('{:<6}'.format(str(reqlist[x].id)), end="")
+            print(method_color[str(reqlist[x].command)] ('{:<10s}'.format(str(reqlist[x].command))), end="")
+            print('{:<40s}{:<40s}'.format(str(reqlist[x].host), path), end="")
             print(response_code_color[str(reslist[x].status)[0]](
-                '{:<30s}'.format(str(reslist[x].status) + ' ' + str(reslist[x].reason))))
+                '{:<20s}'.format(str(reslist[x].status) + ' ' + str(reslist[x].reason))))
 
     print('\n')
 
@@ -152,15 +177,22 @@ def printsingle(number):
 
 mydict = {
     "exit": exitprogram,
+    "h": help,
     "help": help,
     'p': printa,
+    'print': printa,
+    'inspect': printsingle,
     'i': printsingle,
+    'modify': modify,
     'm': modify
 }
 
 mydict2 = {
+    'inspect': printsingle,
     'i': printsingle,
+    'print': printa,
     'p': printa,
+    'modify': modify,
     'm': modify
 }
 
@@ -177,7 +209,7 @@ class Interpreter(object):
                 sig = signature(mydict[command[0]])
                 params = sig.parameters
                 if command[0] == key:
-                    if (command[0] == 'p'):
+                    if (command[0] == 'p' or command[0] == 'print'):
                         if len(command) == 1:
                             mydict[command[0]]()
                         else:
@@ -208,7 +240,7 @@ def sproxy():
 
 
 def inte():
-    print(banner)
+    print(bold(banner))
     print('\n***Sniffing mode***\n')
     while True:
         try:
@@ -243,7 +275,7 @@ class Starting(object):
                 exit()
         if mode == 'intercepting':
             setpath()
-            print(banner)
+            print(bold(banner))
             print('\n***Intercepting mode***\n')
             print("Waiting for incoming request from browser...")
             t = threading.Thread(target=sproxy)

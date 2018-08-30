@@ -82,12 +82,14 @@ class ProxyRequestHandler(BaseHTTPRequestHandler):
 
     def do_CONNECT(self):
         database.setpath(self.pathdb)
+
         if os.path.isfile(self.cakey) and os.path.isfile(self.cacert) and os.path.isfile(self.certkey) and os.path.isdir(self.certdir):
             self.connect_intercept()
         else:
             self.connect_relay()
 
     def connect_intercept(self):
+
         hostname = self.path.split(':')[0]
         certpath = "%s/%s.crt" % (self.certdir.rstrip('/'), hostname)
 
@@ -140,6 +142,24 @@ class ProxyRequestHandler(BaseHTTPRequestHandler):
                     break
                 other.sendall(data)
 
+    def install_cert(self):
+        req = self
+        content_length = int(req.headers.get('Content-Length', 0))
+        try:
+            req_body = self.rfile.read(content_length) if content_length else ''
+        except socket.timeout:
+            req_body = ''
+        if req.path[0] == '/':
+            if isinstance(self.connection, ssl.SSLSocket):
+                req.path = "https://%s%s" % (req.headers['Host'], req.path)
+            else:
+                req.path = "http://%s%s" % (req.headers['Host'], req.path)
+        if req.path == 'https://purp.ca/':
+            self.send_cacert()
+            return True
+        return False
+
+
     def prepare_req(self):
         req = self
         content_length = int(req.headers.get('Content-Length', 0))
@@ -152,28 +172,30 @@ class ProxyRequestHandler(BaseHTTPRequestHandler):
                 req.path = "https://%s%s" % (req.headers['Host'], req.path)
             else:
                 req.path = "http://%s%s" % (req.headers['Host'], req.path)
-        u = urllib.parse.urlsplit(req.path)
-        scheme, netloc, path = u.scheme, u.netloc, (u.path + '?' + u.query if u.query else u.path)
-        assert scheme in ('http', 'https')
-        setattr(req, 'headers', self.filter_headers(req.headers))
-        try:
-            origin = (scheme, netloc)
-            if not origin in self.tls.conns:
-                if scheme == 'https':
-                    self.tls.conns[origin] = http.client.HTTPSConnection(netloc, timeout=self.timeout)
-                else:
-                    self.tls.conns[origin] = http.client.HTTPConnection(netloc, timeout=self.timeout)
-            conn = self.tls.conns[origin]
-        except Exception as e:
-            if origin in self.tls.conns:
-                del self.tls.conns[origin]
-            self.send_error(502)
-        return req, req_body, conn, path, req.headers, origin
+        if req.path != 'https://purp.ca/':
+            u = urllib.parse.urlsplit(req.path)
+            scheme, netloc, path = u.scheme, u.netloc, (u.path + '?' + u.query if u.query else u.path)
+            assert scheme in ('http', 'https')
+            setattr(req, 'headers', self.filter_headers(req.headers))
+            try:
+                origin = (scheme, netloc)
+                if not origin in self.tls.conns:
+                    if scheme == 'https':
+                        self.tls.conns[origin] = http.client.HTTPSConnection(netloc, timeout=self.timeout)
+                    else:
+                        self.tls.conns[origin] = http.client.HTTPConnection(netloc, timeout=self.timeout)
+                conn = self.tls.conns[origin]
+            except Exception as e:
+                if origin in self.tls.conns:
+                    del self.tls.conns[origin]
+                self.send_error(502)
+            return req, req_body, conn, path, req.headers, origin
 
     def make_req(self):
         try:
             req, req_body, conn, path, headers, origin = self.prepare_req()
-            conn.request(self.command, path, req_body, dict(headers))
+            if conn is not None:
+                conn.request(self.command, path, req_body, dict(headers))
         except Exception as e:
             if origin in self.tls.conns:
                 del self.tls.conns[origin]
@@ -270,11 +292,12 @@ class ProxyRequestHandler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         if self.mode == 'Sniffing':
-            req, req_body, conn = self.make_req()
-            res, res_body, res_body_plain = self.make_res(conn)
-            with self.lock:
-                self.save_req(req, req_body)
-                self.save_response(res, res_body_plain)
+            if not self.install_cert():
+                req, req_body, conn = self.make_req()
+                res, res_body, res_body_plain = self.make_res(conn)
+                with self.lock:
+                    self.save_req(req, req_body)
+                    self.save_response(res, res_body_plain)
 
         if self.mode == 'Intercepting':
             text = ''
