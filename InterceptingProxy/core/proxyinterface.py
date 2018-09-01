@@ -1,6 +1,7 @@
 from InterceptingProxy.core.proxyhandler import ProxyRequestHandler, ThreadingHTTPServer
 import os
 import signal
+from InterceptingProxy.core.database import Database
 
 class Proxy(object):
     def __init__(self):
@@ -42,6 +43,8 @@ class Proxy(object):
 
     def close(self):
         self.httpd.shutdown()
+
+
 
     def get_req(self):
         return self.HandlerClass.reqlist

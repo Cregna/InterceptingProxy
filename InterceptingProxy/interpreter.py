@@ -11,6 +11,7 @@ import getpass
 import os
 from InterceptingProxy.core.database import Database
 
+
 pat = ''
 
 p = Proxy()
@@ -78,13 +79,14 @@ def verifyinstall(program):
 def help():
     print("""Global commands:
     help                                        Print this help menu
-    exit                                        Exit Purp
+    quit(q)/exit                                Exit Purp
     print(p)					Print the last 10 info
     print(p) <option value>			Print the last value info
     inspect(i) <option value>			Print the value request and response
     modify(m) <option value>			Modify the value request and show the response	
     less <option value>                         View the value request and response with the pager
-    ciphers <option value>                      View the host ciphers and the  
+    ciphers <option value>                      View the value host ciphers and the ciphers level security
+    portscan <option value>                     View the scan port of value host
 	""")
 
 def ls():
@@ -165,17 +167,19 @@ def printa(val = '10'):
     reqlist = p.get_req()
     reslist = p.get_res()
     titles = ['ID', 'Method', 'Host', 'path', 'R-Code']
-    print(bold('{:<6s}{:<10s}{:<40s}{:<40s}{:<20s}'.format(titles[0], titles[1], titles[2], titles[3], titles[4])))
-    for x in range(len(reqlist)):
-        if x > (len(reqlist)  - int(val) - 1):
-            lenhost = len(reqlist[x].host) + 8
-            path = ((str(reqlist[x].path[lenhost: lenhost + 35]) + '...') if len(reqlist[x].path) - lenhost > 30 else reqlist[x].path[lenhost:])
-            print('{:<6}'.format(str(reqlist[x].id)), end="")
-            print(method_color[str(reqlist[x].command)] ('{:<10s}'.format(str(reqlist[x].command))), end="")
-            print('{:<40s}{:<40s}'.format(str(reqlist[x].host), path), end="")
-            print(response_code_color[str(reslist[x].status)[0]](
-                '{:<20s}'.format(str(reslist[x].status) + ' ' + str(reslist[x].reason))))
-
+    try:
+        print(bold('{:<6s}{:<10s}{:<40s}{:<40s}{:<20s}'.format(titles[0], titles[1], titles[2], titles[3], titles[4])))
+        for x in range(len(reqlist)):
+            if x > (len(reqlist)  - int(val) - 1):
+                lenhost = len(reqlist[x].host) + 8
+                path = ((str(reqlist[x].path[lenhost: lenhost + 35]) + '...') if len(reqlist[x].path) - lenhost > 30 else reqlist[x].path[lenhost:])
+                print('{:<6}'.format(str(reqlist[x].id)), end="")
+                print(method_color[str(reqlist[x].command)] ('{:<10s}'.format(str(reqlist[x].command))), end="")
+                print('{:<40s}{:<40s}'.format(str(reqlist[x].host), path), end="")
+                print(response_code_color[str(reslist[x].status)[0]](
+                    '{:<20s}'.format(str(reslist[x].status) + ' ' + str(reslist[x].reason))))
+    except ValueError:
+        print('\n\nYou enter a non number')
     print('\n')
 
 def printsingle(number):
@@ -311,6 +315,7 @@ def setpath():
     if pat != 'default':
         p.setpath(pat)
 
+
 def sproxy():
     p.start()
 
@@ -337,10 +342,19 @@ def inte():
 
 class Starting(object):
 
-    def start(mode = 'sniffing', path = 'default'):
+    def start(mode = 'sniffing', path='default', flush=False):
         global pat
         #print(verifyinstall('curl'))
         pat = path
+        if flush is True:
+            if pat == 'default':
+                username = getpass.getuser()
+                path = '/home/' + username + '/.purp/purp.sqlite'
+            if pat != 'default':
+                path = pat
+            database = Database()
+            database.setpath(path)
+            database.flush()
         if mode == 'sniffing':
             try:
                 t = threading.Thread(target=sproxy)
@@ -354,7 +368,7 @@ class Starting(object):
             setpath()
             print(bold(banner))
             print('\n***Intercepting mode***\n')
-            print("Waiting for incoming request from browser...")
+            print("For quit the program press q or Control+C\n\nWaiting for incoming request from browser...")
             t = threading.Thread(target=sproxy)
             t.start()
             intercept()
