@@ -154,7 +154,7 @@ class ProxyRequestHandler(BaseHTTPRequestHandler):
                 req.path = "https://%s%s" % (req.headers['Host'], req.path)
             else:
                 req.path = "http://%s%s" % (req.headers['Host'], req.path)
-        if req.path == 'https://purp.ca/':
+        if req.path == 'http://purp.ca/':
             self.send_cacert()
             return True
         return False

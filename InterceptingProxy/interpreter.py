@@ -8,6 +8,7 @@ import email
 import subprocess
 import tempfile
 import getpass
+import os
 from InterceptingProxy.core.database import Database
 
 pat = ''
@@ -56,19 +57,34 @@ class Mycompleter(object):
             return None
 
 def exitprogram():
-    print("Sto uscendo..\n")
+    print("Exiting...\n")
     p.close()
     exit()
 
 
+def verifyinstall(program):
+    try:
+        subprocess.Popen([program], stdout=subprocess.DEVNULL, stderr= subprocess.DEVNULL)
+    except Exception as e:
+        if e.errno == os.errno.ENOENT:
+            # handle file not found error.
+            return False
+        else:
+            # Something else went wrong while trying to run `wget`
+            return False
+    return True
+
+
 def help():
     print("""Global commands:
-    help                                Print this help menu
-    exit                                Exit Purp
-    p					Print the last 10 info
-    p <option value>			Print the last value info
-    i <option value>			Print the value request and response
-    m <option value>			Modify the value request and show the response	
+    help                                        Print this help menu
+    exit                                        Exit Purp
+    print(p)					Print the last 10 info
+    print(p) <option value>			Print the last value info
+    inspect(i) <option value>			Print the value request and response
+    modify(m) <option value>			Modify the value request and show the response	
+    less <option value>                         View the value request and response with the pager
+    ciphers <option value>                      View the host ciphers and the  
 	""")
 
 def ls():
@@ -187,8 +203,48 @@ def less(number):
         command = 'less ' + filename
         subprocess.call(command, shell=True)
 
+def nmap_cyphers(number):
+    number = int(number)
+    reqlist = p.get_req()
+    if number > len(reqlist):
+        print('Wrong ID number')
+    else:
+        host = str(reqlist[number - 1].host)
+        p1 = subprocess.Popen(['nmap', '--script', 'ssl-enum-ciphers', '-p443', host], stdout=subprocess.PIPE)
+        stdout = p1.communicate()[0].decode('utf-8')
+        result = stdout.split('\n')[3:-3]
+        res = '\n'.join(result)
+        print(res)
+
+def nmap_portscan(number):
+    number = int(number)
+    reqlist = p.get_req()
+    if number > len(reqlist):
+        print('Wrong ID number')
+    else:
+        host = str(reqlist[number - 1].host)
+        p1 = subprocess.Popen(['nmap', '-A', host], stdout=subprocess.PIPE)
+        stdout = p1.communicate()[0].decode('utf-8')
+        result = stdout.split('\n')[3:-3]
+        res = '\n'.join(result)
+        print(res)
+
+def nikto_scan(number):
+    number = int(number)
+    reqlist = p.get_req()
+    if number > len(reqlist):
+        print('Wrong ID number')
+    else:
+        host = str(reqlist[number - 1].host)
+        p1 = subprocess.Popen(['nikto', '-h', host], stdout=subprocess.PIPE)
+        stdout = p1.communicate()[0].decode('utf-8')
+        result = stdout.split('\n')[:]
+        res = '\n'.join(result)
+        print(res)
 
 mydict = {
+    'quit': exitprogram,
+    'q': exitprogram,
     'less': less,
     "exit": exitprogram,
     "h": help,
@@ -198,18 +254,24 @@ mydict = {
     'inspect': printsingle,
     'i': printsingle,
     'modify': modify,
-    'm': modify
+    'm': modify,
+    'ciphers': nmap_cyphers,
+    'portscan': nmap_portscan,
+    'nikto': nikto_scan
 }
 
-mydict2 = {
-    'inspect': printsingle,
-    'i': printsingle,
-    'print': printa,
-    'p': printa,
-    'modify': modify,
-    'm': modify,
-    'less': less
-}
+# mydict2 = {
+#     'inspect': printsingle,
+#     'i': printsingle,
+#     'print': printa,
+#     'p': printa,
+#     'modify': modify,
+#     'm': modify,
+#     'less': less,
+#     'ciphers':nmap_cyphers,
+#     'portscan': nmap_portscan,
+#     'nikto': nikto_scan
+# }
 
 
 class Interpreter(object):
@@ -244,7 +306,6 @@ def setpath():
     global pat
     if pat == 'default':
         username = getpass.getuser()
-        namefile = 'purp.sqlite'
         path = '/home/'+username+'/.purp/purp.sqlite'
         p.setpath(path)
     if pat != 'default':
@@ -278,6 +339,7 @@ class Starting(object):
 
     def start(mode = 'sniffing', path = 'default'):
         global pat
+        #print(verifyinstall('curl'))
         pat = path
         if mode == 'sniffing':
             try:
