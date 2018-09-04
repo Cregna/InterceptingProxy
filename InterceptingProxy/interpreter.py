@@ -41,6 +41,16 @@ banner = """
 
                 """
 
+global_help = """Global commands:
+    help                                        Print this help menu
+    quit(q)/exit                                Exit Purp
+    print(p)					Print the last 10 info
+    print(p) <option value>			Print the last value info
+    inspect(i) <option value>			Print the value request and response
+    modify(m) <option value>			Modify the value request and show the response	
+    less <option value>                         View the value request and response with the pager
+    ciphers <option value>                      View the value host ciphers and the ciphers level security
+    """
 class Mycompleter(object):
     def __init__(self, options):
         self.options = sorted(options)
@@ -77,17 +87,7 @@ def verifyinstall(program):
 
 
 def help():
-    print("""Global commands:
-    help                                        Print this help menu
-    quit(q)/exit                                Exit Purp
-    print(p)					Print the last 10 info
-    print(p) <option value>			Print the last value info
-    inspect(i) <option value>			Print the value request and response
-    modify(m) <option value>			Modify the value request and show the response	
-    less <option value>                         View the value request and response with the pager
-    ciphers <option value>                      View the value host ciphers and the ciphers level security
-    portscan <option value>                     View the scan port of value host
-	""")
+    print(global_help)
 
 def ls():
     reqlist = p.get_req()
@@ -260,8 +260,6 @@ mydict = {
     'modify': modify,
     'm': modify,
     'ciphers': nmap_cyphers,
-    'portscan': nmap_portscan,
-    'nikto': nikto_scan
 }
 
 # mydict2 = {
@@ -321,8 +319,20 @@ def sproxy():
 
 
 def inte():
+    global global_help
     print(bold(banner))
     print('\n***Sniffing mode***\n')
+    if verifyinstall('nmap'):
+        mydict.update({'portscan': nmap_portscan})
+        global_help = global_help +  "portscan <option value>                     View the scan port of value host\n"
+    else:
+        print("\n--Nmap is not installed and portscan feature is not available\n")
+    if verifyinstall('nikto'):
+        mydict.update({'nikto': nikto_scan})
+        global_help += "    nikto <option value>                        Try to find vulnerability on value host\n"
+    else:
+        print("\n--Nikto is not installed and vulnerability feature is not available\n")
+
     while True:
         try:
             text = ""
@@ -344,7 +354,7 @@ class Starting(object):
 
     def start(mode = 'sniffing', path='default', flush=False):
         global pat
-        #print(verifyinstall('curl'))
+        #print(verifyinstall('nikto'))
         pat = path
         if flush is True:
             if pat == 'default':
