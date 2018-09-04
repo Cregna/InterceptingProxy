@@ -1,4 +1,7 @@
 from InterceptingProxy.core.proxyhandler import ProxyRequestHandler, ThreadingHTTPServer
+import os
+import signal
+from InterceptingProxy.core.database import Database
 
 class Proxy(object):
     def __init__(self):
@@ -11,8 +14,12 @@ class Proxy(object):
         port = 8080
         server_address = ('localhost', port)
         self.HandlerClass.protocol_version = self.protocol
-        self.httpd = self.ServerClass(server_address, self.HandlerClass)
-        self.httpd.serve_forever()
+        try:
+            self.httpd = self.ServerClass(server_address, self.HandlerClass)
+            self.httpd.serve_forever()
+        except OSError:
+            print('Port already in use! please kill the process on port 8080\nTry the command "fuser -k 8080/tcp"')
+            os.kill(os.getpid(), signal.SIGTERM)
 
     def q(self):
         return self.HandlerClass.q
@@ -36,6 +43,8 @@ class Proxy(object):
 
     def close(self):
         self.httpd.shutdown()
+
+
 
     def get_req(self):
         return self.HandlerClass.reqlist

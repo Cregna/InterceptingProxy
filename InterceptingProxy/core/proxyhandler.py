@@ -43,8 +43,6 @@ class ThreadingHTTPServer(ThreadingMixIn, HTTPServer):
 
 class ProxyRequestHandler(BaseHTTPRequestHandler):
     mainpath= str(Path.home()) + '/.purp/'
-    print(mainpath)
-
     cakey = mainpath + 'ca.key'
     cacert = mainpath + 'ca.crt'
     certkey = mainpath + 'cert.key'
@@ -53,9 +51,8 @@ class ProxyRequestHandler(BaseHTTPRequestHandler):
     lock = threading.Lock()
     reqlist = []
     reslist = []
-    srequest = None
     mode = 'Sniffing'
-    paused = False
+
 
 
 
@@ -65,6 +62,7 @@ class ProxyRequestHandler(BaseHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         self.tls = threading.local()
         self.tls.conns = {}
+        self.first = True
         BaseHTTPRequestHandler.__init__(self, *args, **kwargs)
 
     def get_req(self):
@@ -82,6 +80,7 @@ class ProxyRequestHandler(BaseHTTPRequestHandler):
 
     def do_CONNECT(self):
         database.setpath(self.pathdb)
+
 
         if os.path.isfile(self.cakey) and os.path.isfile(self.cacert) and os.path.isfile(self.certkey) and os.path.isdir(self.certdir):
             self.connect_intercept()
@@ -503,7 +502,11 @@ class ProxyRequestHandler(BaseHTTPRequestHandler):
                         lines = json_str.splitlines()
                         req_body_text = "%s\n(%d lines)" % ('\n'.join(lines[:50]), len(lines))
                 except ValueError:
-                    req_body_text = req_body.decode()
+                    try:
+                        req_body_text = req_body.decode()
+                    except UnicodeDecodeError:
+                        print('can not decode the body request')
+                        req_body_text = req_body
             elif len(req_body) < 1024:
                 req_body_text = req_body.decode()
             if req_body_text:

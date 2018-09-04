@@ -139,3 +139,8 @@ class Database(object):
                     #cur.commit()
             except Exception as e:
                 print(e)
+
+    def flush(self):
+        self.existing()
+        if self.exist is True:
+            os.remove(self.fullpath)

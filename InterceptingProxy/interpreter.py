@@ -8,7 +8,9 @@ import email
 import subprocess
 import tempfile
 import getpass
+import os
 from InterceptingProxy.core.database import Database
+
 
 pat = ''
 
@@ -39,6 +41,16 @@ banner = """
 
                 """
 
+global_help = """Global commands:
+    help                                        Print this help menu
+    quit(q)/exit                                Exit Purp
+    print(p)					Print the last 10 info
+    print(p) <option value>			Print the last value info
+    inspect(i) <option value>			Print the value request and response
+    modify(m) <option value>			Modify the value request and show the response	
+    less <option value>                         View the value request and response with the pager
+    ciphers <option value>                      View the value host ciphers and the ciphers level security
+    """
 class Mycompleter(object):
     def __init__(self, options):
         self.options = sorted(options)
@@ -56,20 +68,26 @@ class Mycompleter(object):
             return None
 
 def exitprogram():
-    print("Sto uscendo..\n")
+    print("Exiting...\n")
     p.close()
     exit()
 
 
+def verifyinstall(program):
+    try:
+        subprocess.Popen([program], stdout=subprocess.DEVNULL, stderr= subprocess.DEVNULL)
+    except Exception as e:
+        if e.errno == os.errno.ENOENT:
+            # handle file not found error.
+            return False
+        else:
+            # Something else went wrong while trying to run `wget`
+            return False
+    return True
+
+
 def help():
-    print("""Global commands:
-    help                                Print this help menu
-    exit                                Exit Purp
-    p					Print the last 10 info
-    p <option value>			Print the last value info
-    i <option value>			Print the value request and response
-    m <option value>			Modify the value request and show the response	
-	""")
+    print(global_help)
 
 def ls():
     reqlist = p.get_req()
@@ -149,17 +167,19 @@ def printa(val = '10'):
     reqlist = p.get_req()
     reslist = p.get_res()
     titles = ['ID', 'Method', 'Host', 'path', 'R-Code']
-    print(bold('{:<6s}{:<10s}{:<40s}{:<40s}{:<20s}'.format(titles[0], titles[1], titles[2], titles[3], titles[4])))
-    for x in range(len(reqlist)):
-        if x > (len(reqlist)  - int(val) - 1):
-            lenhost = len(reqlist[x].host) + 8
-            path = ((str(reqlist[x].path[lenhost: lenhost + 35]) + '...') if len(reqlist[x].path) - lenhost > 30 else reqlist[x].path[lenhost:])
-            print('{:<6}'.format(str(reqlist[x].id)), end="")
-            print(method_color[str(reqlist[x].command)] ('{:<10s}'.format(str(reqlist[x].command))), end="")
-            print('{:<40s}{:<40s}'.format(str(reqlist[x].host), path), end="")
-            print(response_code_color[str(reslist[x].status)[0]](
-                '{:<20s}'.format(str(reslist[x].status) + ' ' + str(reslist[x].reason))))
-
+    try:
+        print(bold('{:<6s}{:<10s}{:<40s}{:<40s}{:<20s}'.format(titles[0], titles[1], titles[2], titles[3], titles[4])))
+        for x in range(len(reqlist)):
+            if x > (len(reqlist)  - int(val) - 1):
+                lenhost = len(reqlist[x].host) + 8
+                path = ((str(reqlist[x].path[lenhost: lenhost + 35]) + '...') if len(reqlist[x].path) - lenhost > 30 else reqlist[x].path[lenhost:])
+                print('{:<6}'.format(str(reqlist[x].id)), end="")
+                print(method_color[str(reqlist[x].command)] ('{:<10s}'.format(str(reqlist[x].command))), end="")
+                print('{:<40s}{:<40s}'.format(str(reqlist[x].host), path), end="")
+                print(response_code_color[str(reslist[x].status)[0]](
+                    '{:<20s}'.format(str(reslist[x].status) + ' ' + str(reslist[x].reason))))
+    except ValueError:
+        print('\n\nYou enter a non number')
     print('\n')
 
 def printsingle(number):
@@ -187,8 +207,48 @@ def less(number):
         command = 'less ' + filename
         subprocess.call(command, shell=True)
 
+def nmap_cyphers(number):
+    number = int(number)
+    reqlist = p.get_req()
+    if number > len(reqlist):
+        print('Wrong ID number')
+    else:
+        host = str(reqlist[number - 1].host)
+        p1 = subprocess.Popen(['nmap', '--script', 'ssl-enum-ciphers', '-p443', host], stdout=subprocess.PIPE)
+        stdout = p1.communicate()[0].decode('utf-8')
+        result = stdout.split('\n')[3:-3]
+        res = '\n'.join(result)
+        print(res)
+
+def nmap_portscan(number):
+    number = int(number)
+    reqlist = p.get_req()
+    if number > len(reqlist):
+        print('Wrong ID number')
+    else:
+        host = str(reqlist[number - 1].host)
+        p1 = subprocess.Popen(['nmap', '-A', host], stdout=subprocess.PIPE)
+        stdout = p1.communicate()[0].decode('utf-8')
+        result = stdout.split('\n')[3:-3]
+        res = '\n'.join(result)
+        print(res)
+
+def nikto_scan(number):
+    number = int(number)
+    reqlist = p.get_req()
+    if number > len(reqlist):
+        print('Wrong ID number')
+    else:
+        host = str(reqlist[number - 1].host)
+        p1 = subprocess.Popen(['nikto', '-h', host], stdout=subprocess.PIPE)
+        stdout = p1.communicate()[0].decode('utf-8')
+        result = stdout.split('\n')[:]
+        res = '\n'.join(result)
+        print(res)
 
 mydict = {
+    'quit': exitprogram,
+    'q': exitprogram,
     'less': less,
     "exit": exitprogram,
     "h": help,
@@ -198,18 +258,22 @@ mydict = {
     'inspect': printsingle,
     'i': printsingle,
     'modify': modify,
-    'm': modify
+    'm': modify,
+    'ciphers': nmap_cyphers,
 }
 
-mydict2 = {
-    'inspect': printsingle,
-    'i': printsingle,
-    'print': printa,
-    'p': printa,
-    'modify': modify,
-    'm': modify,
-    'less': less
-}
+# mydict2 = {
+#     'inspect': printsingle,
+#     'i': printsingle,
+#     'print': printa,
+#     'p': printa,
+#     'modify': modify,
+#     'm': modify,
+#     'less': less,
+#     'ciphers':nmap_cyphers,
+#     'portscan': nmap_portscan,
+#     'nikto': nikto_scan
+# }
 
 
 class Interpreter(object):
@@ -244,19 +308,31 @@ def setpath():
     global pat
     if pat == 'default':
         username = getpass.getuser()
-        namefile = 'purp.sqlite'
         path = '/home/'+username+'/.purp/purp.sqlite'
         p.setpath(path)
     if pat != 'default':
         p.setpath(pat)
+
 
 def sproxy():
     p.start()
 
 
 def inte():
+    global global_help
     print(bold(banner))
     print('\n***Sniffing mode***\n')
+    if verifyinstall('nmap'):
+        mydict.update({'portscan': nmap_portscan})
+        global_help = global_help +  "portscan <option value>                     View the scan port of value host\n"
+    else:
+        print("\n--Nmap is not installed and portscan feature is not available\n")
+    if verifyinstall('nikto'):
+        mydict.update({'nikto': nikto_scan})
+        global_help += "    nikto <option value>                        Try to find vulnerability on value host\n"
+    else:
+        print("\n--Nikto is not installed and vulnerability feature is not available\n")
+
     while True:
         try:
             text = ""
@@ -276,9 +352,19 @@ def inte():
 
 class Starting(object):
 
-    def start(mode = 'sniffing', path = 'default'):
+    def start(mode = 'sniffing', path='default', flush=False):
         global pat
+        #print(verifyinstall('nikto'))
         pat = path
+        if flush is True:
+            if pat == 'default':
+                username = getpass.getuser()
+                path = '/home/' + username + '/.purp/purp.sqlite'
+            if pat != 'default':
+                path = pat
+            database = Database()
+            database.setpath(path)
+            database.flush()
         if mode == 'sniffing':
             try:
                 t = threading.Thread(target=sproxy)
@@ -292,7 +378,7 @@ class Starting(object):
             setpath()
             print(bold(banner))
             print('\n***Intercepting mode***\n')
-            print("Waiting for incoming request from browser...")
+            print("For quit the program press q or Control+C\n\nWaiting for incoming request from browser...")
             t = threading.Thread(target=sproxy)
             t.start()
             intercept()
