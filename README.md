@@ -16,15 +16,15 @@ Additional requirements:
 
 ### INSTALLATION
 
-1. Install the local certificate:
+1. Install the python module needed
+
+    `pip -r install requirements.txt`
+    
+2. Install the local certificate:
 
     `./setup_https_intercept`
     
     This script will create the necessary certificate but you need to install the certificate on the browser for launch purp.
-
-2. Install the python module needed
-
-    `pip -r install requirements.txt`
 
 3. Activate the proxy on the browser configuration on the port 8080 using browser add-on (for example use foxyproxy with firefox browser)
 
