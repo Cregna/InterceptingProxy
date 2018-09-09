@@ -22,16 +22,23 @@ Additional requirements:
     
     This script will create the necessary certificate but you need to install the certificate on the browser for launch purp.
 
-2. Activate the proxy on the browser configuration on the port 8080 and go to the page
-
-    `http://purp.ca`
-
-    Allow the installation of the cerficate on the browser
-    It must be **http** and not https otherwise it will not intall the certificate on the browser.
-
-3. Install the module in the requirements.txt
+2. Install the python module needed
 
     `pip -r install requirements.txt`
+
+3. Activate the proxy on the browser configuration on the port 8080 using browser add-on (for example use foxyproxy with firefox browser)
+
+4. Now we need to add the certificate on the browser.
+    Launch purp
+        
+    `python purp.py`
+  
+    Then visit the site
+    
+    `http://purp.ca`
+
+    Allow the installation of the cerficate on the browser, it must be **http** and not https otherwise it will not intall the certificate on the browser.
+
 
 ### USAGE
 
